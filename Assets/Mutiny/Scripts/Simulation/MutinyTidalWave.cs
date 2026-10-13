@@ -175,7 +175,7 @@ namespace Mutiny.Simulation
 
         private void ApplyOriginalDamageWindow()
         {
-            MutinyCharacter[] characters = Object.FindObjectsByType<MutinyCharacter>();
+            MutinyCharacter[] characters = Object.FindObjectsByType<MutinyCharacter>(FindObjectsSortMode.None);
             for (int i = 0; i < characters.Length; i++)
             {
                 MutinyCharacter character = characters[i];
@@ -210,7 +210,7 @@ namespace Mutiny.Simulation
         private int ResolveOriginalSkyColour()
         {
             MutinyLevelController controller = FindAnyObjectByType<MutinyLevelController>();
-            int level = controller != null ? controller.OriginalLevelIndex : 1;
+            int level = controller != null ? controller.CurrentLevelIndex : 1;
             return ResolveOriginalSkyColourForLevel(level);
         }
 

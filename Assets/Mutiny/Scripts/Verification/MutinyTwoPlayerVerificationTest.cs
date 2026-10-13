@@ -16,19 +16,18 @@ namespace Mutiny.Verification
             flow.PressPlay();
             flow.PressTwoPlayer();
             result.Assert(flow.CurrentPage == MutinyFrontendPage.TwoPlayerLevelSelect &&
-                flow.SelectedTwoPlayerLevel == 1 && !flow.StepTwoPlayerLevel(-1),
-                "2P-NAV/SEL-01 menu enters local two-player 01 (original 16) with no previous level");
+                flow.SelectedTwoPlayerLevel == 16 && !flow.StepTwoPlayerLevel(-1),
+                "2P-NAV/SEL-01 menu enters two-player level 16 with no previous level");
             for (int i = 0; i < 17; i++)
-                result.Assert(flow.StepTwoPlayerLevel(1), $"2P-SEL-01 next local level {i + 2}");
-            result.Assert(flow.SelectedTwoPlayerLevel == 18 && !flow.StepTwoPlayerLevel(1),
-                "2P-SEL-01 next is hidden at local 18 (original 33)");
+                result.Assert(flow.StepTwoPlayerLevel(1), $"2P-SEL-01 next level {i + 17}");
+            result.Assert(flow.SelectedTwoPlayerLevel == 33 && !flow.StepTwoPlayerLevel(1),
+                "2P-SEL-01 next is hidden at 33");
             flow.PressTwoPlayerLevelSelectBack();
             flow.PressTwoPlayer();
-            result.Assert(flow.SelectedTwoPlayerLevel == 18,
+            result.Assert(flow.SelectedTwoPlayerLevel == 33,
                 "2P-SEL-01 selector remembers the last numbered level");
-            result.Assert(MutinyLevelController.HasLevelData(new MutinyLevelId(MutinyGameMode.LocalTwoPlayer, 18)) &&
-                flow.TrySelectTwoPlayerLevel(number => MutinyLevelController.HasLevelData(
-                    new MutinyLevelId(MutinyGameMode.LocalTwoPlayer, number))) &&
+            result.Assert(MutinyLevelController.HasNumberedLevelData(33) &&
+                flow.TrySelectTwoPlayerLevel(MutinyLevelController.HasNumberedLevelData) &&
                 flow.CurrentPage == MutinyFrontendPage.Gameplay &&
                 flow.ReturnToTwoPlayerLevelSelect(),
                 "2P-ASSET-01 official level 33 is available through the production selector");
@@ -38,15 +37,15 @@ namespace Mutiny.Verification
             {
                 MutinyLevelController controller = host.AddComponent<MutinyLevelController>();
                 controller.ConfigureSession(MutinyGameMode.LocalTwoPlayer, resetVersusWins: true);
-                result.Assert(MutinyLevelController.HasLevelData(new MutinyLevelId(MutinyGameMode.LocalTwoPlayer, 1)) &&
-                    controller.TryLoadLevel(1),
+                result.Assert(MutinyLevelController.HasNumberedLevelData(16) &&
+                    controller.TryLoadLevel(16),
                     "2P-DATA-01 production numbered loader accepts verified original 16");
                 MutinyLevelRoot level = controller.CurrentLevel;
                 result.Assert(level != null && level.Players == 1 && level.Team1 != null && level.Team2 != null &&
                     !level.Team1.IsAiControlled && !level.Team2.IsAiControlled &&
                     level.Team2.GetComponent<MutinyAIController>() == null,
                     "2P-DATA-01 menu mode overrides XML players=1 without changing XML metadata");
-                result.Assert(!controller.TryLoadLevel(19) && controller.CurrentLevelIndex == 1 &&
+                result.Assert(!controller.TryLoadLevel(34) && controller.CurrentLevelIndex == 16 &&
                     controller.CurrentLevel == level,
                     "2P-ASSET-01 invalid 34 does not clamp or replace the active level");
                 // Passing a turn can spawn a chest and needs a running scene.
@@ -65,7 +64,7 @@ namespace Mutiny.Verification
                 VerifyProductionResult(controller, result, GameOverResult.Team1Wins, 1, 0);
                 controller.RestartCurrentLevel();
                 result.Assert(controller.Player1Wins == 1 && controller.Player2Wins == 0 &&
-                    controller.CurrentLevelIndex == 1,
+                    controller.CurrentLevelIndex == 16,
                     "2P-EXIT-01 restart preserves score and selected level");
                 VerifyProductionResult(controller, result, GameOverResult.Team2Wins, 1, 1);
                 controller.RestartCurrentLevel();
@@ -75,10 +74,9 @@ namespace Mutiny.Verification
                     "2P-SEL/END-02 versus results do not change single-player unlock or score");
                 for (int number = 16; number <= 33; number++)
                 {
-                    bool loaded = controller.TryLoadLevel(number - 15);
+                    bool loaded = controller.TryLoadLevel(number);
                     MutinyLevelRoot current = controller.CurrentLevel;
-                    result.Assert(loaded && current != null && controller.CurrentLevelIndex == number - 15 &&
-                        controller.OriginalLevelIndex == number &&
+                    result.Assert(loaded && current != null && controller.CurrentLevelIndex == number &&
                         current.Team1 != null && current.Team2 != null &&
                         current.Team1.AliveCount > 0 && current.Team2.AliveCount > 0 &&
                         !current.Team1.IsAiControlled && !current.Team2.IsAiControlled &&
@@ -91,9 +89,14 @@ namespace Mutiny.Verification
             }
             finally
             {
-                // This fixture may be followed by another verification in the
-                // same frame; do not leave a discoverable controller until frame end.
-                Object.DestroyImmediate(host);
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                    Object.DestroyImmediate(host);
+                else
+                    Object.Destroy(host);
+#else
+                Object.Destroy(host);
+#endif
             }
             return result;
         }
@@ -108,14 +111,11 @@ namespace Mutiny.Verification
                 DrownTeam(turn.Team2);
             if (expected == GameOverResult.Team2Wins || expected == GameOverResult.Draw)
                 DrownTeam(turn.Team1);
-            // The prior pass can have spawned a real chest. Advance the world,
-            // including its descent, rather than ticking only the turn manager.
-            for (int tick = 0; tick < 4096 && turn.CurrentPhase != TurnPhase.GameOver; tick++)
-                AdvanceWorldTick(level, turn);
+            for (int tick = 0; tick < 24 && turn.CurrentPhase != TurnPhase.GameOver; tick++)
+                turn.AdvanceSimulationTick();
             result.Assert(turn.CurrentPhase == TurnPhase.GameOver && turn.GameResult == expected &&
                 controller.Player1Wins == p1 && controller.Player2Wins == p2,
-                $"2P-END-01 production drown and turn settlement produce {expected} with score {p1}:{p2} " +
-                $"(phase={turn.CurrentPhase}, result={turn.GameResult}, actual={controller.Player1Wins}:{controller.Player2Wins}, rest={turn.CheckAllBodiesAtRest()})");
+                $"2P-END-01 production drown and turn settlement produce {expected} with score {p1}:{p2}");
             for (int tick = 0; tick < 24; tick++)
                 turn.AdvanceSimulationTick();
             result.Assert(controller.Player1Wins == p1 && controller.Player2Wins == p2,
@@ -141,8 +141,8 @@ namespace Mutiny.Verification
                     new Vector2(firstOwn.PhysicsBody.State.X, firstOwn.PhysicsBody.State.Y)),
                 "2P-INP-01 active pointer rejects enemy and selects own character");
             turn.PassTurn();
-            for (int tick = 0; tick < 4096 && turn.CurrentTeam == first; tick++)
-                AdvanceWorldTick(level, turn);
+            for (int tick = 0; tick < 24 && turn.CurrentTeam == first; tick++)
+                turn.AdvanceSimulationTick();
             result.Assert(turn.CurrentTeam == second && turn.CurrentPhase == TurnPhase.TurnActive &&
                 text.PendingLineCount > 1,
                 "2P-TURN/FEED-01 production pass switches to the other human and queues the next prompt");
@@ -159,20 +159,6 @@ namespace Mutiny.Verification
         {
             foreach (MutinyCharacter character in team.Characters)
                 character?.Drown();
-        }
-
-        private static void AdvanceWorldTick(MutinyLevelRoot level, MutinyTurnManager turn)
-        {
-            foreach (MutinyCharacter character in level.Characters)
-                if (character != null && character.PhysicsBody != null)
-                {
-                    // Runtime Start normally binds terrain before the first Update.
-                    // Synchronous verification uses the body's production lazy binding.
-                    character.PhysicsBody.TryGetTerrain(out _, out _, out _);
-                    character.PhysicsBody.AdvanceSimulationTick();
-                }
-            level.GetComponent<MutinyTreasureChestManager>()?.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
-            turn.AdvanceSimulationTick();
         }
     }
 }

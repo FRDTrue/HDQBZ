@@ -11,7 +11,6 @@ namespace Mutiny.Simulation
         public const int OriginalTargetWaitTicks = 10;
         public const float OriginalFadeAlphaPerTick = 0.1f;
 
-        [Header("Target Link")]
         public MutinyCharacter TargetCharacter { get; private set; }
 
         private int m_FramesOnThis = OriginalOwnerFlightTicks;
@@ -31,7 +30,7 @@ namespace Mutiny.Simulation
             if (inputTeam == null || inputTeam.IsAiControlled)
                 return false;
 
-            MutinyVoodooDoll[] dolls = FindObjectsByType<MutinyVoodooDoll>();
+            MutinyVoodooDoll[] dolls = FindObjectsByType<MutinyVoodooDoll>(FindObjectsSortMode.None);
             for (int i = 0; i < dolls.Length; i++)
             {
                 MutinyVoodooDoll doll = dolls[i];

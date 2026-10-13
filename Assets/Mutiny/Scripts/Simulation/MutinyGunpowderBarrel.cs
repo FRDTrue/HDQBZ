@@ -41,8 +41,6 @@ namespace Mutiny.Simulation
         private float m_AiOffset;
         private int m_AiDelay;
         private int m_AiDelayAfter;
-        private bool m_FixedAiPlan;
-        private int m_FixedAiPlanIndex;
 
         public MutinyGunpowderBarrel NextBox => m_NextBox;
         public bool HasPlacedAny => IsFired;
@@ -95,8 +93,6 @@ namespace Mutiny.Simulation
             m_AiList = null;
             m_AiDelay = 0;
             m_AiDelayAfter = 0;
-            m_FixedAiPlan = false;
-            m_FixedAiPlanIndex = 0;
             SetVisible(false);
         }
 
@@ -135,7 +131,85 @@ namespace Mutiny.Simulation
         }
 
         public bool CanPlace(Vector2 pixelPosition, string[,] terrain, int gridWidth, int gridHeight)
-            => MutinyBoxPlacementRules.CanPlaceLive(pixelPosition, terrain, gridWidth, gridHeight, PhysicsBody);
+        {
+            if (terrain == null || gridWidth <= 0 || gridHeight <= 0)
+                return false;
+
+            float px = pixelPosition.x;
+            float py = pixelPosition.y;
+            int left = Mathf.FloorToInt((px - LeftExtentPixels) / 32f);
+            int right = Mathf.FloorToInt((px + LeftExtentPixels) / 32f);
+            int top = Mathf.FloorToInt((py - LeftExtentPixels) / 32f);
+            int bottom = Mathf.FloorToInt((py + LeftExtentPixels) / 32f);
+            for (int x = left; x <= right; x++)
+                for (int y = top; y <= bottom; y++)
+                    if (IsSolidTile(terrain, x, y, gridWidth, gridHeight))
+                        return false;
+
+            // The original retains the first support surface as a vertical boundary.
+            float obstructionY = (bottom + 1) * 32f;
+            for (int y = bottom; y < gridHeight; y++)
+            {
+                bool foundSolid = false;
+                for (int x = left; x <= right; x++)
+                {
+                    if (IsSolidTile(terrain, x, y, gridWidth, gridHeight))
+                    {
+                        // Original canPlace accepts the first supporting column;
+                        // the complete barrel width does not need ground beneath it.
+                        foundSolid = true;
+                        break;
+                    }
+                }
+                if (foundSolid)
+                {
+                    obstructionY = (y + 1) * 32f;
+                    break;
+                }
+            }
+
+            List<PhysicsBoxObstacle> boxes = MutinyBoxRegistry.GetObstacles(PhysicsBody);
+            for (int i = 0; i < boxes.Count; i++)
+            {
+                PhysicsBodyState other = boxes[i].State;
+                if (other.X - other.LeftExtent <= px + LeftExtentPixels &&
+                    other.X + other.RightExtent >= px - RightExtentPixels &&
+                    other.Y + other.BottomExtent >= py - RightExtentPixels)
+                {
+                    if (other.Y - other.TopExtent < obstructionY)
+                        obstructionY = other.Y - other.TopExtent;
+                    if (other.Y - other.TopExtent <= py + LeftExtentPixels)
+                        return false;
+                }
+            }
+
+            MutinyTreasureChest[] chests = FindObjectsByType<MutinyTreasureChest>(FindObjectsSortMode.None);
+            for (int i = 0; i < chests.Length; i++)
+            {
+                if (chests[i] == null)
+                    continue;
+                Vector2 chestPx = new Vector2(chests[i].PixelX, chests[i].PixelY);
+                if (chestPx.x - 16f <= px + LeftExtentPixels &&
+                    chestPx.x + 16f >= px - RightExtentPixels &&
+                    chestPx.y + 16f >= py - LeftExtentPixels)
+                    return false;
+            }
+
+            MutinyCharacter[] characters = FindObjectsByType<MutinyCharacter>(FindObjectsSortMode.None);
+            for (int i = 0; i < characters.Length; i++)
+            {
+                MutinyCharacter character = characters[i];
+                if (character == null || !character.IsAlive || character.PhysicsBody == null)
+                    continue;
+                PhysicsBodyState body = character.PhysicsBody.State;
+                if (body.X - body.LeftExtent <= px + LeftExtentPixels &&
+                    body.X + body.RightExtent >= px - RightExtentPixels &&
+                    body.Y + body.BottomExtent >= py - RightExtentPixels &&
+                    body.Y - body.TopExtent <= obstructionY)
+                    return false;
+            }
+            return true;
+        }
 
         /// <summary>Called by MutinyExplosion after its original AABB-radius check.</summary>
         public void Explode()
@@ -206,7 +280,7 @@ namespace Mutiny.Simulation
 
             if (m_CreateMore > 0)
             {
-                m_NextBox = MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", Owner, AiStrategyContext, AiActionPlan) as MutinyGunpowderBarrel;
+                m_NextBox = MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", Owner) as MutinyGunpowderBarrel;
                 if (m_NextBox != null)
                 {
                     m_NextBox.m_CreateMore = m_CreateMore - 1;
@@ -274,12 +348,12 @@ namespace Mutiny.Simulation
         internal void AdvancePlacementTickForVerification() => AdvanceSequenceTick();
 
         /// <summary>BoxWeapon.aiPerform: retain the first three source candidates.</summary>
-        public bool BeginAiPlacement(Vector2[] possibilities, bool fixedPlan = false)
+        public bool BeginAiPlacement(Vector2[] possibilities)
         {
-            if (possibilities == null || possibilities.Length < (fixedPlan ? OriginalPlacementCount : 3) || Owner == null || !Owner.IsAlive)
+            if (possibilities == null || possibilities.Length < 3 || Owner == null || !Owner.IsAlive)
                 return false;
 
-            int count = Mathf.Min(fixedPlan ? OriginalPlacementCount : 3, possibilities.Length);
+            int count = Mathf.Min(3, possibilities.Length);
             m_AiList = new Vector2[count];
             Array.Copy(possibilities, m_AiList, count);
             m_AiIndex = 0;
@@ -287,8 +361,6 @@ namespace Mutiny.Simulation
             m_AiNext = new Vector2(float.NaN, float.NaN);
             m_AiDelay = 0;
             m_AiDelayAfter = 0;
-            m_FixedAiPlan = fixedPlan;
-            m_FixedAiPlanIndex = 0;
             AiContinue();
             MutinyDebugLog.Info("GunpowderBarrel", $"AI armed candidates={count} firstDelay={m_AiDelay}", this);
             return m_AiList != null && m_AiDelay > 0;
@@ -300,14 +372,6 @@ namespace Mutiny.Simulation
                 return;
 
             m_AiDelay = AiPlaceDelayTicks;
-            if (m_FixedAiPlan)
-            {
-                if (m_FixedAiPlanIndex < m_AiList.Length && CanPlace(m_AiList[m_FixedAiPlanIndex]))
-                { m_AiNext = m_AiList[m_FixedAiPlanIndex++]; return; }
-                m_AiList = null;
-                MutinyDebugLog.Warning("GunpowderBarrel", "submitted enhanced placement became invalid", this);
-                return;
-            }
             // Original quirk: first call has undefined aiNext coordinates, then
             // advances aiIndex before selecting a candidate. Keep that ordering.
             if (!float.IsNaN(m_AiNext.x) && CanPlace(m_AiNext + Vector2.up * -48f) && UnityEngine.Random.value >= 0.4f)

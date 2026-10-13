@@ -177,7 +177,7 @@ namespace Mutiny.Presentation
             if (m_Team != null && m_Team.Characters.Contains(m_Character))
                 return;
 
-            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
+            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>(FindObjectsSortMode.None);
             for (int i = 0; i < teams.Length; i++)
             {
                 if (teams[i] != null && teams[i].Characters.Contains(m_Character))

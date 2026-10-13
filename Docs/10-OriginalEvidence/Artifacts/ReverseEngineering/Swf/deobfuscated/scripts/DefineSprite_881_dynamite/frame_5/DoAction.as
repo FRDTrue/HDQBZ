@@ -1,1 +1,0 @@
-this.gotoAndPlay("lit");

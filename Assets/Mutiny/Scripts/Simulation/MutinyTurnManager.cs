@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Mutiny.Diagnostics;
 using Mutiny.Levels;
+using Mutiny.Network;
 using UnityEngine;
 
 namespace Mutiny.Simulation
@@ -52,10 +53,6 @@ namespace Mutiny.Simulation
 
         public bool ActionCommittedThisTurn => m_ActionCommittedThisTurn;
         public bool IsAiTakeoverActive => m_AiTakeoverTeam != null;
-        // A selected actor's death ends this turn even before Twang/Fire commits.
-        // Null selection is different: it is the normal beginning of a turn.
-        public bool HasSelectedCharacterDied => CurrentTeam != null &&
-            CurrentTeam.SelectedCharacter != null && !CurrentTeam.SelectedCharacter.IsAlive;
 
         // GM-08: temporarily hand the current human turn to the normal AI.
         // Do not StartTurn/ResetTurnActions: a player jump may already be committed.
@@ -65,6 +62,16 @@ namespace Mutiny.Simulation
             if (!MutinyAIController.IsValidGmLuck(luck))
             {
                 error = "Luck must be a finite number from 0 to 99999.";
+                return false;
+            }
+            // AI takeover consumes only the local machine's RNG and would desync
+            // an online peer; GM-08 stays a local/single-player tool.
+            MutinyLevelController takeoverModeOwner = GetComponentInParent<MutinyLevelController>() ??
+                FindAnyObjectByType<MutinyLevelController>();
+            if (takeoverModeOwner != null &&
+                takeoverModeOwner.ActiveGameMode == MutinyGameMode.OnlineTwoPlayer)
+            {
+                error = "AI takeover is unavailable during online matches.";
                 return false;
             }
             if (IsAiTakeoverActive || CurrentTeam == null || CurrentTeam.IsAiControlled ||
@@ -90,7 +97,7 @@ namespace Mutiny.Simulation
 
             m_AiTakeoverTeam = CurrentTeam;
             CurrentTeam.IsAiControlled = true;
-            foreach (var input in FindObjectsByType<Mutiny.Presentation.MutinyPlayerInput>())
+            foreach (var input in FindObjectsByType<Mutiny.Presentation.MutinyPlayerInput>(FindObjectsSortMode.None))
                 if (input.TurnManager == this)
                     input.ReleaseUncommittedInputForAiTakeover();
 
@@ -143,6 +150,21 @@ namespace Mutiny.Simulation
 
         public void StartGame()
         {
+            StartGameWithForcedFirst(MutinyNetworkManager.ForcedFirstTeamNumber);
+        }
+
+        /// <summary>
+        /// Verification entry: drives the same production start with an explicit
+        /// opening rule, so the "a forced side consumes no match RNG" contract can
+        /// be checked without a live LAN session.
+        /// </summary>
+        internal void StartGameWithForcedFirstForVerification(int forcedFirstTeamNumber)
+        {
+            StartGameWithForcedFirst(forcedFirstTeamNumber);
+        }
+
+        private void StartGameWithForcedFirst(int forcedFirstTeamNumber)
+        {
             RestorePlayerControl();
             if (!HasPlayableTeams())
             {
@@ -160,11 +182,12 @@ namespace Mutiny.Simulation
 
             RefreshCharacterCache();
 
-            // Single-player always starts with the red team. In the original local
-            // two-player mode either side starts with an even random chance.
-            CurrentTeam = !Team2.IsAiControlled && UnityEngine.Random.value >= 0.5f
-                ? Team2
-                : Team1;
+            // Only the random rule draws from MutinyMatchRandom. A forced online
+            // side must not advance the shared sequence on one machine only, or
+            // the chest drops and flame scatter would diverge from the peer.
+            CurrentTeam = forcedFirstTeamNumber == 0
+                ? ResolveOpeningTeam(Team1, Team2, 0, MutinyMatchRandom.NextValue())
+                : ResolveOpeningTeam(Team1, Team2, forcedFirstTeamNumber, 0f);
             CurrentPhase = TurnPhase.TurnActive;
 
             if (CurrentTeam != null)
@@ -236,15 +259,6 @@ namespace Mutiny.Simulation
 
         public void AdvanceSimulationTick()
         {
-            if (HasSelectedCharacterDied && CurrentPhase != TurnPhase.NotStarted &&
-                CurrentPhase != TurnPhase.GameOver && CurrentPhase != TurnPhase.Settling)
-            {
-                CurrentPhase = TurnPhase.Settling;
-                InactivityTicks = 0;
-                MutinyDebugLog.Info("Turn",
-                    $"selected character died; settling team={TeamLabel(CurrentTeam)} selected={CharacterLabel(CurrentTeam.SelectedCharacter)} committed={m_ActionCommittedThisTurn}", this);
-            }
-
             bool allAtRest = CheckAllBodiesAtRest(out string restBlocker);
 
             if (allAtRest)
@@ -282,7 +296,7 @@ namespace Mutiny.Simulation
                 }
 
                 InactivityTicks = 0;
-                if (m_ActionCommittedThisTurn && !HasSelectedCharacterDied)
+                if (m_ActionCommittedThisTurn)
                     CurrentPhase = TurnPhase.ActionExecuting;
             }
         }
@@ -323,7 +337,7 @@ namespace Mutiny.Simulation
             }
 
             // 2. Check active weapons / projectiles
-            var activeWeapons = FindObjectsByType<MutinyWeapon>();
+            var activeWeapons = FindObjectsByType<MutinyWeapon>(FindObjectsSortMode.None);
             for (int i = 0; i < activeWeapons.Length; i++)
             {
                 if (activeWeapons[i] is MutinyCannon cannon && cannon.IsFirePending &&
@@ -374,7 +388,7 @@ namespace Mutiny.Simulation
             }
 
             // 3. Check active explosions
-            var activeExplosions = FindObjectsByType<MutinyExplosion>();
+            var activeExplosions = FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
             if (activeExplosions.Length > 0)
             {
                 blocker = $"explosions:{activeExplosions.Length}";
@@ -384,7 +398,7 @@ namespace Mutiny.Simulation
             // 4. Check active treasure chests (air-drops falling or item collection in progress)
             if (MutinyTreasureChestManager.SystemEnabled)
             {
-                var chests = FindObjectsByType<MutinyTreasureChest>();
+                var chests = FindObjectsByType<MutinyTreasureChest>(FindObjectsSortMode.None);
                 for (int i = 0; i < chests.Length; i++)
                 {
                     var chest = chests[i];
@@ -487,10 +501,9 @@ namespace Mutiny.Simulation
             }
 
             // Merely having no selected character is the normal state at the start of
-            // an original Mutiny turn. A live actor must commit an action/pass,
-            // but Team.isTurnComplete also ends a selected dead actor's turn.
-            // Do not require the user to release an aim after a lethal mine hit.
-            if (!m_ActionCommittedThisTurn && !HasSelectedCharacterDied)
+            // an original Mutiny turn. A turn may only finish after an action (or an
+            // explicit pass) has actually been committed.
+            if (!m_ActionCommittedThisTurn)
             {
                 bool resumedFromWait = CurrentPhase != TurnPhase.TurnActive;
                 CurrentPhase = TurnPhase.TurnActive;
@@ -531,6 +544,22 @@ namespace Mutiny.Simulation
                 MutinyDebugLog.Info("Turn",
                     $"continuing team={TeamLabel(CurrentTeam)} selected={CharacterLabel(CurrentTeam?.SelectedCharacter)} canThrow={CurrentTeam?.SelectedCharacter?.CanThrow} canShoot={CurrentTeam?.SelectedCharacter?.CanShoot}", this);
             }
+        }
+
+        /// <summary>
+        /// Opening side of a match. 1 or 2 is the host's forced choice; 0 keeps
+        /// the original rule: single-player always opens with the red team
+        /// (team 2 is AI), while local and online two-player use the seeded coin
+        /// flip, which both peers resolve identically from the match seed.
+        /// </summary>
+        internal static MutinyTeam ResolveOpeningTeam(MutinyTeam team1, MutinyTeam team2,
+            int forcedFirstTeamNumber, float randomValue)
+        {
+            if (forcedFirstTeamNumber == 1)
+                return team1;
+            if (forcedFirstTeamNumber == 2)
+                return team2;
+            return team2 != null && !team2.IsAiControlled && randomValue >= 0.5f ? team2 : team1;
         }
 
         private static string TeamLabel(MutinyTeam team)

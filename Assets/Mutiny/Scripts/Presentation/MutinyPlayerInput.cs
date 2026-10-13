@@ -1,5 +1,6 @@
 using Mutiny.Diagnostics;
 using Mutiny.Levels;
+using Mutiny.Network;
 using Mutiny.Simulation;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -85,8 +86,6 @@ namespace Mutiny.Presentation
         }
 
         private Vector3 m_AimOrigin;
-        private Vector3 m_LastAimPointerWorld;
-        private bool m_HasAimPreview;
         private bool m_ControllerAiming;
         private bool m_ControllerTriggerMustRelease = true;
         // Pixel-space drag direction. Solid.twang launches opposite the drag endpoint.
@@ -115,9 +114,26 @@ namespace Mutiny.Presentation
         private Vector2 m_MobileTapStartPosition;
         private int m_SecondaryCameraTouchId = NoActiveTouchId;
         private Vector2 m_LastSecondaryCameraTouchPosition;
+        // Two-finger pinch. The fingers only become a zoom once their distance
+        // changes past the deadzone; below it the second finger keeps its
+        // original camera-pan role.
+        private const float PinchStartDeadzonePixels = 6f;
+        private bool m_IsPinching;
+        private float m_PinchPreviousDistancePixels = -1f;
         // Unlike ordinary projectiles, PiecesOfEight remains equipped and is reused
         // for coin 2..8 while the turn stays in ActionExecuting.
         private MutinyPiecesOfEight m_ArmedPiecesOfEight;
+
+        // Online lockstep: replayed remote commands re-enter the commit points
+        // below; the flag stops them from being echoed back to the peer and
+        // exempts them from the turn-ownership gates, because a peer's commit
+        // is trusted simulation input even though this machine does not own
+        // that team.
+        private bool m_ReplayingRemoteCommand;
+        private bool m_RemoteHooked;
+        // Final DragBodyTo pointer of the current cannon interaction; the swept
+        // body move in ReleasePointer needs this value to replay identically.
+        private Vector2? m_CannonBodyDragTargetPixels;
 
         private void Start()
         {
@@ -164,10 +180,7 @@ namespace Mutiny.Presentation
 
         private void Update()
         {
-            // Death is terminal, not a player cancellation. Run before popup,
-            // phase and device gates so a held mouse/touch/pad cannot retain aim.
-            // Keep Team.SelectedCharacter for the manager's settlement decision.
-            bool selectedCharacterDied = ReleaseInputForSelectedCharacterDeath();
+            HookNetworkIfPresent();
 
             // popup is above the game root in the Flash timeline. While it is
             // visible (including the four-tick fade) its buttons consume mouse
@@ -206,11 +219,6 @@ namespace Mutiny.Presentation
                     HideTrajectory();
                 return;
             }
-
-            // Modal speech/quit controls above remain available after death,
-            // including Android's touch-to-advance ending speech.
-            if (selectedCharacterDied)
-                return;
 
             if (!CanProcessCurrentTurnInput())
             {
@@ -307,10 +315,18 @@ namespace Mutiny.Presentation
             if (pointer.PressedThisFrame)
             {
                 if (MutinySeagull.TryRequestPlayerShot(currentTeam))
+                {
+                    DispatchLocal(MutinyNetCommandType.SeagullShot, currentTeam.TeamNumber, -1,
+                        null, default, default, -1);
                     return;
+                }
 
                 if (MutinyBanana.TryRequestPlayerDetonation(currentTeam))
+                {
+                    DispatchLocal(MutinyNetCommandType.BananaDetonate, currentTeam.TeamNumber, -1,
+                        null, default, default, -1);
                     return;
+                }
             }
 
             UpdateHoveredCharacter(currentTeam, mouseWorld);
@@ -424,27 +440,17 @@ namespace Mutiny.Presentation
             AdvanceAimPointer(selectedCharacter, mouseWorld, pointer.IsPressed, pointer.ReleasedThisFrame);
         }
 
-        private void LateUpdate()
-        {
-            if (!m_HasAimPreview || InteractionState != MutinyPlayerInteractionState.Aiming ||
-                !CanProcessCurrentTurnInput())
-                return;
-
-            MutinyCharacter character = GetHumanSelectedCharacter();
-            if (character == null || !character.IsAlive)
-                return;
-            // Physics Update may run after input Update. Redraw from its final
-            // state and the body's shared display sample, even without pointer motion.
-            RefreshAimOrigin(character);
-            ShowTrajectory(IsControllerAiming ? GetControllerAimEndpoint() : m_LastAimPointerWorld);
-        }
-
         // Banana.advanceMotion checks Controller.tileSystem.mouseButtonDown after
         // Weapon.fire has spent CanShoot. Its next click therefore must remain
         // routable while this team is in ActionExecuting, unlike ordinary input.
         private bool CanProcessCurrentTurnInput()
         {
-            if (TurnManager == null || TurnManager.HasSelectedCharacterDied)
+            if (TurnManager == null)
+                return false;
+
+            // Online lockstep: only the owning side may act on its turn. The
+            // remote replay path bypasses this method entirely.
+            if (!IsLocalPlayerTurn())
                 return false;
 
             bool placingBoxWeapon = HasPendingBoxPlacement();
@@ -481,6 +487,20 @@ namespace Mutiny.Presentation
                 CanceledThisFrame = canceledThisFrame;
                 SecondaryPressedThisFrame = secondaryPressedThisFrame;
             }
+        }
+
+        /// <summary>
+        /// True when this machine may drive the team that is currently acting.
+        /// Outside a LAN match every local team qualifies; inside one, only the
+        /// team this peer owns does, so neither player can see or use the
+        /// opponent's menus.
+        /// </summary>
+        private bool IsLocalPlayerTurn()
+        {
+            if (!MutinyNetworkManager.IsOnlineMatch)
+                return true;
+            return TurnManager != null && TurnManager.CurrentTeam != null &&
+                   MutinyNetworkManager.IsLocalTeam(TurnManager.CurrentTeam.TeamNumber);
         }
 
         private bool TryReadPointer(out PointerFrameState pointer)
@@ -549,7 +569,11 @@ namespace Mutiny.Presentation
                     touch.press.wasReleasedThisFrame);
 
                 if (touch.press.wasReleasedThisFrame || pointer.CanceledThisFrame)
+                {
                     m_ActiveTouchId = NoActiveTouchId;
+                    // A pinch without its first finger cannot continue.
+                    EndPinchGesture();
+                }
                 return true;
             }
 
@@ -605,6 +629,7 @@ namespace Mutiny.Presentation
         {
             m_IsMobileCameraDragging = false;
             m_IsPendingMobileTap = false;
+            EndPinchGesture();
             m_ArmedCannon?.CancelPointer();
             if (InteractionState == MutinyPlayerInteractionState.Aiming)
                 CancelCurrentAim();
@@ -703,6 +728,65 @@ namespace Mutiny.Presentation
                 m_IsMobileCameraDragging = false;
         }
 
+        /// <summary>True while the two-finger pinch owns the touch gesture.</summary>
+        internal bool IsPinching => m_IsPinching;
+
+        internal static bool ShouldStartPinch(float distanceChangePixels, float deadzonePixels)
+        {
+            return Mathf.Abs(distanceChangePixels) > Mathf.Max(0f, deadzonePixels);
+        }
+
+        internal static float ResolvePinchDistanceRatio(
+            float previousDistancePixels, float currentDistancePixels)
+        {
+            return previousDistancePixels > 0.0001f
+                ? currentDistancePixels / previousDistancePixels
+                : 1f;
+        }
+
+        /// <summary>
+        /// Production two-finger step. The first observed distance only sets the
+        /// baseline; once the fingers move apart or together past the deadzone
+        /// the gesture becomes a pinch and owns both fingers, so the ordinary
+        /// secondary-touch camera pan stops for the rest of that gesture.
+        /// </summary>
+        internal bool AdvancePinchGesture(Vector2 primaryPixels, Vector2 secondaryPixels)
+        {
+            float distance = Vector2.Distance(primaryPixels, secondaryPixels);
+            float previous = m_PinchPreviousDistancePixels;
+            m_PinchPreviousDistancePixels = distance;
+            if (previous < 0f)
+                return false;
+            if (!m_IsPinching && !ShouldStartPinch(distance - previous, PinchStartDeadzonePixels))
+                return false;
+
+            m_IsPinching = true;
+            MutinyCameraController controller = GetGameCameraController();
+            if (controller != null)
+                controller.ZoomByPinchRatio(ResolvePinchDistanceRatio(previous, distance));
+            return true;
+        }
+
+        private void EndPinchGesture()
+        {
+            m_IsPinching = false;
+            m_PinchPreviousDistancePixels = -1f;
+        }
+
+        private Vector2 ReadActiveTouchPosition(Touchscreen touchscreen)
+        {
+            if (touchscreen != null)
+            {
+                for (int i = 0; i < touchscreen.touches.Count; i++)
+                {
+                    var touch = touchscreen.touches[i];
+                    if (touch.touchId.ReadValue() == m_ActiveTouchId)
+                        return touch.position.ReadValue();
+                }
+            }
+            return m_LastTouchPosition;
+        }
+
         private void UpdateSecondaryMobileCameraTouch()
         {
             if (!Application.isMobilePlatform)
@@ -712,6 +796,7 @@ namespace Mutiny.Presentation
             if (touchscreen == null)
             {
                 m_SecondaryCameraTouchId = NoActiveTouchId;
+                EndPinchGesture();
                 return;
             }
 
@@ -727,6 +812,7 @@ namespace Mutiny.Presentation
                     if (phase == UnityEngine.InputSystem.TouchPhase.Canceled)
                     {
                         m_SecondaryCameraTouchId = NoActiveTouchId;
+                        EndPinchGesture();
                         return;
                     }
 
@@ -735,25 +821,38 @@ namespace Mutiny.Presentation
                     m_LastSecondaryCameraTouchPosition = position;
                     bool released = phase == UnityEngine.InputSystem.TouchPhase.Ended ||
                                     touch.press.wasReleasedThisFrame;
-                    if ((touch.press.isPressed || released) &&
-                        delta.sqrMagnitude > Mathf.Epsilon)
+
+                    // Pinch first: once the two fingers change their distance the
+                    // zoom owns the gesture, so the secondary finger never pans
+                    // and no new tap or drag candidate starts underneath it.
+                    if (AdvancePinchGesture(ReadActiveTouchPosition(touchscreen), position))
+                    {
+                        m_IsMobileCameraDragging = false;
+                        m_IsPendingMobileTap = false;
+                    }
+                    else if ((touch.press.isPressed || released) &&
+                             delta.sqrMagnitude > Mathf.Epsilon)
                     {
                         MutinyCameraController controller = GetGameCameraController();
                         if (controller == null ||
                             !controller.PanByMobileTouchDelta(delta, true))
                             m_SecondaryCameraTouchId = NoActiveTouchId;
                     }
+
                     if (released)
+                    {
                         m_SecondaryCameraTouchId = NoActiveTouchId;
+                        EndPinchGesture();
+                    }
                     return;
                 }
 
                 m_SecondaryCameraTouchId = NoActiveTouchId;
+                EndPinchGesture();
                 return;
             }
 
-            if (!IsAiming || m_IsMobileCameraDragging ||
-                m_ActiveTouchId == NoActiveTouchId)
+            if (m_ActiveTouchId == NoActiveTouchId || m_IsMobileCameraDragging)
                 return;
 
             for (int i = 0; i < touchscreen.touches.Count; i++)
@@ -763,18 +862,24 @@ namespace Mutiny.Presentation
                 if (touchId == m_ActiveTouchId || !candidate.press.wasPressedThisFrame)
                     continue;
 
-                // The aiming finger remains down. A second finger pressing the
-                // cross cancels before it can become a camera-pan gesture.
+                // The first finger remains down. A second finger pressing the
+                // cross cancels the aim before it can become a camera gesture.
                 if (TryCancelAimFromSecondaryTouch(
                         GetMouseWorldPosition(candidate.position.ReadValue())))
                     return;
 
                 MutinyCameraController cameraController = GetGameCameraController();
-                if (cameraController == null || !cameraController.CanStartMobileTouchPan(true))
+                bool aiming = IsAiming;
+                bool canPan = cameraController != null &&
+                              cameraController.CanStartMobileTouchPan(aiming);
+                bool canZoom = cameraController != null &&
+                               cameraController.CanStartMobilePinchZoom(aiming);
+                if (!canPan && !canZoom)
                     return;
 
                 m_SecondaryCameraTouchId = touchId;
                 m_LastSecondaryCameraTouchPosition = candidate.position.ReadValue();
+                EndPinchGesture();
                 return;
             }
         }
@@ -939,7 +1044,14 @@ namespace Mutiny.Presentation
             m_SecondaryCameraTouchId = NoActiveTouchId;
             m_IsMobileCameraDragging = false;
             m_IsPendingMobileTap = false;
+            EndPinchGesture();
         }
+
+        /// <summary>
+        /// The verification entry drops every owned gesture through the same
+        /// production reset the pointer-cancel and level-reset paths use.
+        /// </summary>
+        internal void ResetMobileGestureOwnershipForVerification() => ResetMobileGestureOwnership();
 
         // The verification entry invokes exactly the Update phase gate; it avoids
         // only physical Mouse.current acquisition.
@@ -1088,6 +1200,12 @@ namespace Mutiny.Presentation
                 if (frame.Confirm && cannon.CommitControllerShot(TurnManager))
                 {
                     character.ConsumeWeapon("cannon");
+                    // Same replay contract as the mouse release path: the peer
+                    // re-runs body placement (no-op here) and the pin pull pose.
+                    DispatchLocal(MutinyNetCommandType.CannonCommit,
+                        TurnManager.CurrentTeam.TeamNumber,
+                        IndexOfCharacter(TurnManager.CurrentTeam, character),
+                        "cannon", cannon.NetworkBodyPixel, cannon.NetworkPinPixel, -1);
                     cannon.SetAimingState(false);
                     HideTrajectory();
                     InteractionState = MutinyPlayerInteractionState.WeaponReady;
@@ -1095,8 +1213,10 @@ namespace Mutiny.Presentation
                 }
                 return;
             }
-            RefreshAimOrigin(character);
-            Vector3 worldEndpoint = GetControllerAimEndpoint();
+            Vector2 origin = MutinyPhysics.UnityToPixel(m_AimOrigin);
+            float force = MutinyWeaponFactory.GetTwangMaxForce(ActiveWeapon) * ControllerPower;
+            Vector2 endpoint = origin + m_ControllerPullDirection * (force * 4f);
+            Vector3 worldEndpoint = MutinyPhysics.PixelToUnity(endpoint.x, endpoint.y);
             ShowTrajectory(worldEndpoint);
             if (frame.Confirm)
             {
@@ -1236,6 +1356,16 @@ namespace Mutiny.Presentation
 
         public bool SelectWeapon(string weaponType)
         {
+            // The weapon menu belongs to the turn owner; a LAN peer must not be
+            // able to equip a weapon for the opponent's team. Replayed remote
+            // commands are exempt: they are the opponent's own equip commit.
+            if (!IsLocalPlayerTurn() && !m_ReplayingRemoteCommand)
+            {
+                MutinyDebugLog.Warning("Input",
+                    $"weapon selection rejected: this machine does not own the current turn weapon={weaponType}", this);
+                return false;
+            }
+
             MutinyCharacter character = GetHumanSelectedCharacter();
             if (character == null || !character.CanShoot || character.WeaponLocked || !character.HasWeapon(weaponType))
             {
@@ -1267,11 +1397,22 @@ namespace Mutiny.Presentation
             HideTrajectory();
             MutinyDebugLog.Info("Input",
                 $"weapon ready character={character.name} weapon={weaponType} instance={m_EquippedWeapon.name} pos=({m_EquippedWeapon.PhysicsBody.State.X:F1},{m_EquippedWeapon.PhysicsBody.State.Y:F1})", this);
+            DispatchLocal(MutinyNetCommandType.EquipWeapon,
+                TurnManager != null && TurnManager.CurrentTeam != null
+                    ? TurnManager.CurrentTeam.TeamNumber : 0,
+                IndexOfCharacter(TurnManager?.CurrentTeam, character), weaponType, default, default, -1);
             return true;
         }
 
         public bool SelectCharacterThrow()
         {
+            if (!IsLocalPlayerTurn() && !m_ReplayingRemoteCommand)
+            {
+                MutinyDebugLog.Warning("Input",
+                    "character throw selection rejected: this machine does not own the current turn", this);
+                return false;
+            }
+
             MutinyCharacter character = GetHumanSelectedCharacter();
             if (character == null || !character.CanThrow)
             {
@@ -1313,30 +1454,6 @@ namespace Mutiny.Presentation
             ClearSpecialWeaponCursor();
             ClearHoveredCharacter();
             m_WasTurnActive = false;
-        }
-
-        private bool ReleaseInputForSelectedCharacterDeath()
-        {
-            if (TurnManager == null || !TurnManager.HasSelectedCharacterDied)
-                return false;
-
-            bool hadPendingInput = IsAiming || ActiveWeapon != null || m_EquippedWeapon != null;
-            if (m_ArmedCannon != null && !m_ArmedCannon.IsFirePending && !m_ArmedCannon.IsFired)
-                m_ArmedCannon.CancelPointer();
-            ResetControllerAction();
-            ResetControllerCharacterFocus();
-            ResetMobileGestureOwnership();
-            HideTrajectory();
-            ClearEquippedWeapon(); // Retains fired/pending-committed effects.
-            ClearSpecialWeaponCursor();
-            ClearHoveredCharacter();
-            ActiveWeapon = null;
-            InteractionState = MutinyPlayerInteractionState.CharacterSelection;
-            m_WasTurnActive = false;
-            if (hadPendingInput)
-                MutinyDebugLog.Info("Input",
-                    $"released input for selected dead character={TurnManager.CurrentTeam.SelectedCharacter.name}; waiting for settlement", this);
-            return true;
         }
 
         public bool ShouldShowCancelWeapon(MutinyCharacter character)
@@ -1414,7 +1531,6 @@ namespace Mutiny.Presentation
             if (InteractionState != MutinyPlayerInteractionState.Aiming)
                 return;
 
-            RefreshAimOrigin(character);
             // MouseUp/Ended only resolves the aim; the cross owns onPress, not release.
             if (PixelDistance(pointerWorld, m_AimOrigin) >= MinDragDistancePixels)
             {
@@ -1430,6 +1546,11 @@ namespace Mutiny.Presentation
             MutinyCharacter character, Vector3 pointerWorld, bool isPressed, bool releasedThisFrame)
         {
             if (InteractionState != MutinyPlayerInteractionState.Aiming)
+                return;
+
+            // A pinch owns both fingers, so the aim stays where it was until the
+            // zoom gesture ends instead of tracking the moving pinch finger.
+            if (m_IsPinching)
                 return;
 
             if (isPressed)
@@ -1522,6 +1643,9 @@ namespace Mutiny.Presentation
 
         public void ReturnToCharacterSelection()
         {
+            if (!IsLocalPlayerTurn() && !m_ReplayingRemoteCommand)
+                return;
+
             MutinyCharacter selected = GetHumanSelectedCharacter();
             if (selected != null && !selected.CanThrow)
                 return;
@@ -1538,6 +1662,13 @@ namespace Mutiny.Presentation
 
         public void EndTurn()
         {
+            if (!IsLocalPlayerTurn() && !m_ReplayingRemoteCommand)
+            {
+                MutinyDebugLog.Warning("Input",
+                    "end turn rejected: this machine does not own the current turn", this);
+                return;
+            }
+
             MutinyCharacter character = GetHumanSelectedCharacter();
             if (character == null)
             {
@@ -1554,6 +1685,8 @@ namespace Mutiny.Presentation
             character.CanShoot = false;
             InteractionState = MutinyPlayerInteractionState.WeaponReady;
             MutinyDebugLog.Info("Input", $"end turn character={character.name}", this);
+            DispatchLocal(MutinyNetCommandType.PassTurn, TurnManager.CurrentTeam.TeamNumber,
+                IndexOfCharacter(TurnManager.CurrentTeam, character), null, default, default, -1);
             TurnManager.NotifyActionStarted();
         }
 
@@ -1565,7 +1698,13 @@ namespace Mutiny.Presentation
 
         private bool TrySelectCharacterReference(MutinyTeam team, MutinyCharacter clicked)
         {
-            if (team == null || clicked == null || !clicked.IsAlive || !team.Characters.Contains(clicked) ||
+            // During a LAN match only the owning machine may pick that team's
+            // character, which is what opens its weapon menu. Replayed remote
+            // commands are exempt: they are the opponent's own selection commit.
+            if (team == null ||
+                (!m_ReplayingRemoteCommand && !MutinyNetworkManager.IsLocalTeam(team.TeamNumber)))
+                return false;
+            if (clicked == null || !clicked.IsAlive || !team.Characters.Contains(clicked) ||
                 (team.SelectedCharacter != null && !team.SelectedCharacter.CanThrow))
                 return false;
             team.SelectCharacter(clicked);
@@ -1573,6 +1712,8 @@ namespace Mutiny.Presentation
             ResetControllerCharacterFocus();
             ActiveWeapon = null;
             InteractionState = MutinyPlayerInteractionState.ActionMenu;
+            DispatchLocal(MutinyNetCommandType.SelectCharacter, team.TeamNumber,
+                IndexOfCharacter(team, clicked), null, default, default, -1);
             MutinyDebugLog.Info("Input", $"character selected team=T{team.TeamNumber} character={clicked.name}", this);
             return true;
         }
@@ -1620,6 +1761,9 @@ namespace Mutiny.Presentation
                 return true;
 
             ClearHoveredCharacter();
+            DispatchLocal(MutinyNetCommandType.VoodooTarget, team.TeamNumber,
+                IndexOfCharacter(team, owner), null, default, default,
+                IndexOfCharacter(FindOpposingTeam(team), target));
             MutinyAudioManager.Instance?.PlaySFX("voodoo");
             MutinyDebugLog.Info("Input", $"voodoo target selected owner={owner.name} target={target.name}", this);
             return true;
@@ -1644,6 +1788,8 @@ namespace Mutiny.Presentation
                 // The source tests pin first, then the 20px cannon-body circle.
                 bool beganDrag = m_ArmedCannon.TryBeginPinDrag(mousePixels) ||
                                  m_ArmedCannon.TryBeginBodyDrag(mousePixels);
+                if (beganDrag)
+                    m_CannonBodyDragTargetPixels = m_ArmedCannon.NetworkBodyPixel;
                 // A desktop Cannon owns the board just like the Flash mouse
                 // implementation. On mobile, an actual blank press remains
                 // available to the camera-drag gesture.
@@ -1655,12 +1801,20 @@ namespace Mutiny.Presentation
                 if (m_ArmedCannon.IsDraggingPin)
                     m_ArmedCannon.DragPinTo(mousePixels);
                 else if (m_ArmedCannon.IsDraggingBody)
+                {
                     m_ArmedCannon.DragBodyTo(mousePixels);
+                    m_CannonBodyDragTargetPixels = mousePixels;
+                }
                 return true;
             }
 
             if (pointer.ReleasedThisFrame)
             {
+                // Capture the commit pose before ReleasePointer applies the swept
+                // body move; the peer replays body drag and pin pull from it.
+                Vector2 pinFinal = m_ArmedCannon.NetworkPinPixel;
+                Vector2 bodyFinal = m_CannonBodyDragTargetPixels ?? m_ArmedCannon.NetworkBodyPixel;
+                m_CannonBodyDragTargetPixels = null;
                 bool committed = m_ArmedCannon.ReleasePointer(TurnManager);
                 if (committed)
                 {
@@ -1670,6 +1824,10 @@ namespace Mutiny.Presentation
                     character.ConsumeWeapon("cannon");
                     MutinyDebugLog.Info("Input", $"cannon pin committed character={character.name}", this);
                 }
+                DispatchLocal(MutinyNetCommandType.CannonCommit,
+                    TurnManager != null && TurnManager.CurrentTeam != null ? TurnManager.CurrentTeam.TeamNumber : 0,
+                    IndexOfCharacter(TurnManager?.CurrentTeam, character),
+                    "cannon", bodyFinal, pinFinal, -1);
                 return true;
             }
 
@@ -1680,6 +1838,13 @@ namespace Mutiny.Presentation
         {
             if (character == null || string.IsNullOrEmpty(ActiveWeapon))
                 return false;
+
+            // Placements and click-activated weapons (crate, barrel, anchor,
+            // seagull route, tidal wave) replay from the click pixel alone.
+            DispatchLocal(MutinyNetCommandType.LaunchWeapon,
+                TurnManager != null && TurnManager.CurrentTeam != null ? TurnManager.CurrentTeam.TeamNumber : 0,
+                IndexOfCharacter(TurnManager?.CurrentTeam, character),
+                ActiveWeapon, default, MutinyPhysics.UnityToPixel(mouseWorld), -1);
 
             if (ActiveWeapon.Equals("woodenCrate", System.StringComparison.OrdinalIgnoreCase))
             {
@@ -1830,18 +1995,9 @@ namespace Mutiny.Presentation
             if (m_CachedTerrain == null)
                 CacheTerrain();
 
-            // Original Solid prediction is unconstrained; no terrain is needed.
-            if (TrajectoryRenderer == null)
+            if (TrajectoryRenderer == null || m_CachedTerrain == null)
                 return;
 
-            MutinyCharacter character = GetHumanSelectedCharacter();
-            RefreshAimOrigin(character);
-            m_LastAimPointerWorld = mouseWorld;
-            m_HasAimPreview = true;
-            MutinyPhysicsBody body = !string.IsNullOrEmpty(ActiveWeapon) && EquippedWeapon != null
-                ? EquippedWeapon.PhysicsBody : character != null ? character.PhysicsBody : null;
-            Vector2 displayOrigin = MutinyPhysics.UnityToPixel(
-                body != null ? body.PresentationPosition : m_AimOrigin);
             Vector2 startPixels = MutinyPhysics.UnityToPixel(m_AimOrigin);
             Vector2 dragPixels = MutinyPhysics.UnityToPixel(mouseWorld);
             TrajectoryRenderer.ShowTrajectory(
@@ -1852,30 +2008,20 @@ namespace Mutiny.Presentation
                 m_GridHeight,
                 MutinyWeaponFactory.GetTwangMaxForce(ActiveWeapon),
                 MutinyWeaponFactory.GetPredictionWeight(ActiveWeapon),
-                ActiveWeapon,
-                displayOrigin);
-        }
-
-        private void RefreshAimOrigin(MutinyCharacter character)
-        {
-            // Solid.drawTwangLine and Solid.twang both read this.x/y, never the
-            // coordinates cached by the initial press. A mine may move the actor.
-            if (InteractionState == MutinyPlayerInteractionState.Aiming && character != null && character.IsAlive)
-                m_AimOrigin = GetReadyActionOrigin(character);
-        }
-
-        private Vector3 GetControllerAimEndpoint()
-        {
-            Vector2 origin = MutinyPhysics.UnityToPixel(m_AimOrigin);
-            float force = MutinyWeaponFactory.GetTwangMaxForce(ActiveWeapon) * ControllerPower;
-            Vector2 endpoint = origin + m_ControllerPullDirection * (force * 4f);
-            return MutinyPhysics.PixelToUnity(endpoint.x, endpoint.y);
+                ActiveWeapon);
         }
 
         private void Launch(MutinyCharacter character, Vector3 releaseWorldPosition)
         {
             Vector2 startPixels = MutinyPhysics.UnityToPixel(m_AimOrigin);
             Vector2 dragPixels = MutinyPhysics.UnityToPixel(releaseWorldPosition);
+
+            // Every twang-path commit (self throw, click weapons, voodoo and the
+            // piecesOfEight coins) funnels through here; one command type covers all.
+            DispatchLocal(MutinyNetCommandType.CommitThrow,
+                TurnManager != null && TurnManager.CurrentTeam != null ? TurnManager.CurrentTeam.TeamNumber : 0,
+                IndexOfCharacter(TurnManager?.CurrentTeam, character),
+                ActiveWeapon, startPixels, dragPixels, -1);
 
             if (!string.IsNullOrEmpty(ActiveWeapon) &&
                 ActiveWeapon.Equals("piecesOfEight", System.StringComparison.OrdinalIgnoreCase) &&
@@ -2009,9 +2155,175 @@ namespace Mutiny.Presentation
 
         private void HideTrajectory()
         {
-            m_HasAimPreview = false;
             if (TrajectoryRenderer != null)
                 TrajectoryRenderer.HideTrajectory();
+        }
+
+        private void OnDestroy() => UnhookNetwork();
+
+        private void HookNetworkIfPresent()
+        {
+            if (m_RemoteHooked || !MutinyNetworkManager.Exists)
+                return;
+            MutinyNetworkManager.Instance.OnCommandReceived += OnRemoteCommandReceived;
+            m_RemoteHooked = true;
+        }
+
+        private void UnhookNetwork()
+        {
+            if (!m_RemoteHooked)
+                return;
+            if (MutinyNetworkManager.Exists)
+                MutinyNetworkManager.Instance.OnCommandReceived -= OnRemoteCommandReceived;
+            m_RemoteHooked = false;
+        }
+
+        private void OnRemoteCommandReceived(MutinyNetCommand command)
+        {
+            ExecuteRemoteCommand(in command);
+        }
+
+        // Replay a peer's commit through the same production routes the local
+        // player used; the flag stops the replay from echoing back over the wire.
+        // Public so the scripted Play Mode loopback (a separate dynamic assembly)
+        // can drive it like the network layer does.
+        public void ExecuteRemoteCommand(in MutinyNetCommand command)
+        {
+            if (TurnManager == null)
+                return;
+            MutinyTeam team = ResolveTeam(command.TeamNumber);
+            if (team == null)
+                return;
+
+            m_ReplayingRemoteCommand = true;
+            try
+            {
+                switch (command.Type)
+                {
+                    case MutinyNetCommandType.SelectCharacter:
+                        TrySelectCharacterReference(team, CharacterAt(team, command.CharacterIndex));
+                        break;
+                    case MutinyNetCommandType.EquipWeapon:
+                        SelectWeapon(command.WeaponType);
+                        break;
+                    case MutinyNetCommandType.CommitThrow:
+                    {
+                        MutinyCharacter thrower = CharacterAt(team, command.CharacterIndex);
+                        if (string.IsNullOrEmpty(command.WeaponType))
+                        {
+                            // Bare self-throw: launch routes demand an equipped
+                            // weapon, so replay the dedicated throw commit instead.
+                            TryCommitCharacterThrow(thrower,
+                                new Vector2(command.OriginX, command.OriginY),
+                                new Vector2(command.ReleaseX, command.ReleaseY));
+                        }
+                        else
+                        {
+                            TryLaunchWeaponForVerification(thrower,
+                                new Vector2(command.OriginX, command.OriginY),
+                                new Vector2(command.ReleaseX, command.ReleaseY));
+                        }
+                        break;
+                    }
+                    case MutinyNetCommandType.LaunchWeapon:
+                        TryActivateClickWeaponForVerification(
+                            CharacterAt(team, command.CharacterIndex),
+                            new Vector2(command.ReleaseX, command.ReleaseY));
+                        break;
+                    case MutinyNetCommandType.VoodooTarget:
+                    {
+                        MutinyCharacter voodooOwner = CharacterAt(team, command.CharacterIndex);
+                        MutinyCharacter voodooTarget = CharacterAt(FindOpposingTeam(team), command.TargetIndex);
+                        if (voodooOwner != null && voodooTarget != null && voodooTarget.PhysicsBody != null)
+                        {
+                            Vector2 targetPixels = new Vector2(
+                                voodooTarget.PhysicsBody.State.X, voodooTarget.PhysicsBody.State.Y);
+                            TrySelectVoodooTarget(team, voodooOwner,
+                                MutinyPhysics.PixelToUnity(targetPixels.x, targetPixels.y));
+                        }
+                        break;
+                    }
+                    case MutinyNetCommandType.CannonCommit:
+                    {
+                        MutinyCharacter gunner = CharacterAt(team, command.CharacterIndex);
+                        if (m_ArmedCannon == null || m_ArmedCannon.IsFinished ||
+                            m_ArmedCannon.Owner != gunner)
+                            break;
+                        if (m_ArmedCannon.TryBeginBodyDrag(m_ArmedCannon.NetworkBodyPixel))
+                        {
+                            m_ArmedCannon.DragBodyTo(new Vector2(command.OriginX, command.OriginY));
+                            m_ArmedCannon.ReleasePointer(TurnManager);
+                        }
+                        if (m_ArmedCannon.TryBeginControllerAim())
+                        {
+                            m_ArmedCannon.DragPinTo(new Vector2(command.ReleaseX, command.ReleaseY));
+                            if (m_ArmedCannon.ReleasePointer(TurnManager))
+                                gunner?.ConsumeWeapon("cannon");
+                        }
+                        break;
+                    }
+                    case MutinyNetCommandType.PassTurn:
+                        EndTurn();
+                        break;
+                    case MutinyNetCommandType.SeagullShot:
+                        MutinySeagull.TryRequestPlayerShot(team);
+                        break;
+                    case MutinyNetCommandType.BananaDetonate:
+                        MutinyBanana.TryRequestPlayerDetonation(team);
+                        break;
+                }
+            }
+            finally
+            {
+                m_ReplayingRemoteCommand = false;
+            }
+        }
+
+        private void DispatchLocal(MutinyNetCommandType type, int teamNumber, int characterIndex,
+            string weaponType, Vector2 originPixels, Vector2 releasePixels, int targetIndex)
+        {
+            if (m_ReplayingRemoteCommand)
+                return;
+            MutinyNetworkManager manager = MutinyNetworkManager.Instance;
+            if (manager == null)
+                return;
+            manager.SendCommand(new MutinyNetCommand
+            {
+                Type = type,
+                TeamNumber = teamNumber,
+                CharacterIndex = characterIndex,
+                WeaponType = weaponType ?? string.Empty,
+                OriginX = originPixels.x,
+                OriginY = originPixels.y,
+                ReleaseX = releasePixels.x,
+                ReleaseY = releasePixels.y,
+                TargetIndex = targetIndex
+            });
+        }
+
+        private static int IndexOfCharacter(MutinyTeam team, MutinyCharacter character)
+        {
+            if (team == null || team.Characters == null || character == null)
+                return -1;
+            return team.Characters.IndexOf(character);
+        }
+
+        private static MutinyCharacter CharacterAt(MutinyTeam team, int index)
+        {
+            return team?.Characters != null && index >= 0 && index < team.Characters.Count
+                ? team.Characters[index]
+                : null;
+        }
+
+        private MutinyTeam ResolveTeam(int teamNumber)
+        {
+            if (TurnManager == null)
+                return null;
+            if (TurnManager.Team1 != null && TurnManager.Team1.TeamNumber == teamNumber)
+                return TurnManager.Team1;
+            if (TurnManager.Team2 != null && TurnManager.Team2.TeamNumber == teamNumber)
+                return TurnManager.Team2;
+            return null;
         }
 
         private Vector3 GetReadyActionOrigin(MutinyCharacter character)
@@ -2022,8 +2334,6 @@ namespace Mutiny.Presentation
                 return MutinyPhysics.PixelToUnity(
                     equipped.PhysicsBody.State.X, equipped.PhysicsBody.State.Y);
             }
-            if (character != null && character.PhysicsBody != null)
-                return MutinyPhysics.PixelToUnity(character.PhysicsBody.State.X, character.PhysicsBody.State.Y);
             return character != null ? character.transform.position : Vector3.zero;
         }
 
@@ -2162,7 +2472,7 @@ namespace Mutiny.Presentation
                     return TurnManager.Team1;
             }
 
-            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
+            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>(FindObjectsSortMode.None);
             for (int i = 0; i < teams.Length; i++)
             {
                 if (teams[i] != null && teams[i] != team && teams[i].TeamNumber != team.TeamNumber)

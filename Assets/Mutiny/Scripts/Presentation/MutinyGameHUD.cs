@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Mutiny.Diagnostics;
 using Mutiny.Levels;
+using Mutiny.Network;
 using Mutiny.Persistence;
 using Mutiny.Simulation;
 using UnityEngine;
@@ -158,7 +159,6 @@ namespace Mutiny.Presentation
         private Texture2D m_Team2Panel;
         private Texture2D m_SpeechBubbleTexture;
         private Texture2D m_Team1Portrait;
-        private Texture2D m_RobotPortrait;
         private Texture2D[] m_OpponentPortraits = Array.Empty<Texture2D>();
         private readonly Dictionary<string, Texture2D> m_WeaponIcons = new Dictionary<string, Texture2D>();
         private bool m_StylesInitialized = false;
@@ -414,7 +414,7 @@ namespace Mutiny.Presentation
         public static MutinyGameEndPopupKind ResolveGameEndPopupKind(GameOverResult result, int levelIndex,
             MutinyGameMode mode)
         {
-            if (mode == MutinyGameMode.LocalTwoPlayer)
+            if (MutinyLevelController.IsVersusGameMode(mode))
             {
                 if (result == GameOverResult.Team1Wins) return MutinyGameEndPopupKind.VersusPlayer1Wins;
                 if (result == GameOverResult.Team2Wins) return MutinyGameEndPopupKind.VersusPlayer2Wins;
@@ -438,6 +438,18 @@ namespace Mutiny.Presentation
         private void AdvanceGameEndPopupAnimationTick()
         {
             SynchronizeGameEndPopup();
+            // An online peer may restart the match or return to the lobby at any
+            // moment; the board under this popup is then rebuilt or cleared, so
+            // the local popup must follow instead of waiting for a local press.
+            if (m_GameEndPopupShow &&
+                (TurnManager == null || TurnManager.CurrentPhase != TurnPhase.GameOver))
+            {
+                m_GameEndPopupShow = false;
+                m_GameEndPopupAlpha = 0f;
+                m_GameEndPopupKind = MutinyGameEndPopupKind.None;
+                MutinyDebugLog.Info("HUD", "END-POP closed by remote match transition", this);
+                return;
+            }
             if (!m_GameEndPopupShow)
                 return;
 
@@ -537,13 +549,25 @@ namespace Mutiny.Presentation
 
         private void AdvanceActionPanelAnimationTick()
         {
-            bool shouldOpen = PlayerInput != null && PlayerInput.IsActionMenuOpen &&
-                              TurnManager != null && TurnManager.CurrentTeam != null &&
-                              !TurnManager.CurrentTeam.IsAiControlled &&
-                              TurnManager.CurrentTeam.SelectedCharacter != null &&
-                              TurnManager.CurrentTeam.SelectedCharacter.IsAlive;
+            AdvanceActionPanelState(ShouldOpenActionPanel(), ref m_ActionPanelAlpha, ref m_ActionPanelContentsActive);
+        }
 
-            AdvanceActionPanelState(shouldOpen, ref m_ActionPanelAlpha, ref m_ActionPanelContentsActive);
+        /// <summary>
+        /// The bottom weapon menu belongs to the player whose turn it is. In a LAN
+        /// match that is the machine that owns the current team, so the peer never
+        /// draws - or can click - the other player's menu. Outside a LAN match
+        /// every team is local, which leaves single-player and local two-player
+        /// menu behaviour untouched.
+        /// </summary>
+        internal bool ShouldOpenActionPanel()
+        {
+            MutinyTeam currentTeam = TurnManager != null ? TurnManager.CurrentTeam : null;
+            return PlayerInput != null && PlayerInput.IsActionMenuOpen &&
+                   currentTeam != null &&
+                   !currentTeam.IsAiControlled &&
+                   currentTeam.SelectedCharacter != null &&
+                   currentTeam.SelectedCharacter.IsAlive &&
+                   MutinyNetworkManager.IsLocalTeam(currentTeam.TeamNumber);
         }
 
         internal static void AdvanceActionPanelState(
@@ -711,7 +735,8 @@ namespace Mutiny.Presentation
             m_SfxCornerOnOverTexture = LoadPointTexture("UI/CornerControls/sfx_on_over");
             m_SfxCornerOffUpTexture = LoadPointTexture("UI/CornerControls/sfx_off_up");
             m_SfxCornerOffOverTexture = LoadPointTexture("UI/CornerControls/sfx_off_over");
-            EnsureOpponentPortraits();
+            m_OpponentPortraits = Resources.LoadAll<Texture2D>("UI/BattleHUD/Opponents");
+            Array.Sort(m_OpponentPortraits, (a, b) => ParseNumericTextureName(a).CompareTo(ParseNumericTextureName(b)));
             for (int i = 0; i < OriginalWeaponOrder.Length; i++)
             {
                 string weaponType = OriginalWeaponOrder[i];
@@ -743,7 +768,7 @@ namespace Mutiny.Presentation
 
             DrawSpeechBubble();
             DrawOriginalBattleHud();
-            MutinyControllerUI.BeginScope(PlayerInput != null ? "actions:" + PlayerInput.GetEntityId() : "actions:none");
+            MutinyControllerUI.BeginScope(PlayerInput != null ? "actions:" + PlayerInput.GetInstanceID() : "actions:none");
             DrawBottomBar();
             MutinyControllerUI.BeginScope("board");
             DrawOriginalCornerControls();
@@ -855,7 +880,7 @@ namespace Mutiny.Presentation
             // DefineSprite 465: textHolder at (-75,-21), DangleFont at (-25,-10)
             // relative to the clip registration point. Keep the same visible field
             // for typing and click-to-complete (the Flash mouseDown used a wrong path).
-            MutinyLocalizedText.Speech(ResolveSpeechTextRect(bubbleRect), null, Speech.VisibleText, Speech.FullText);
+            MutinyLocalizedText.Speech(ResolveSpeechTextRect(bubbleRect), null, Speech.VisibleText);
             GUI.color = previousColor;
 
             Event evt = Event.current;
@@ -1146,6 +1171,30 @@ namespace Mutiny.Presentation
             return BackToModeLevelSelect();
         }
 
+        /// <summary>
+        /// Versus game-end popup "back to menu". Online keeps the session alive:
+        /// the host re-opens the versus picker and the client waits in the lobby
+        /// for the next MatchStart. Local versus returns to the shared picker.
+        /// </summary>
+        public bool BackFromVersusResult()
+        {
+            if (LevelController != null && LevelController.ActiveGameMode == MutinyGameMode.OnlineTwoPlayer)
+            {
+                MutinyFrontendController frontend = FrontendController != null
+                    ? FrontendController : FindAnyObjectByType<MutinyFrontendController>();
+                if (frontend == null)
+                    return false;
+                frontend.OnlineBackToLevelSelect();
+                m_QuitPromptShow = false;
+                m_QuitPromptAlpha = 0f;
+                m_GameEndPopupShow = false;
+                m_GameEndPopupAlpha = 0f;
+                Debug.Log("[MutinyHUD] END-POP online versus back to level select", this);
+                return true;
+            }
+            return BackToModeLevelSelect();
+        }
+
         public bool BackToModeLevelSelect()
         {
             MutinyFrontendController frontend = FindAnyObjectByType<MutinyFrontendController>();
@@ -1155,7 +1204,21 @@ namespace Mutiny.Presentation
                 return false;
             }
 
-            bool twoPlayer = LevelController != null && LevelController.ActiveGameMode == MutinyGameMode.LocalTwoPlayer;
+            // Online matches cannot "go back to level select": only the host may
+            // pick levels, and both peers must leave together.
+            if (LevelController != null && LevelController.ActiveGameMode == MutinyGameMode.OnlineTwoPlayer)
+            {
+                frontend.QuitOnlineMatchToTitle();
+                m_QuitPromptShow = false;
+                m_QuitPromptAlpha = 0f;
+                m_GameEndPopupShow = false;
+                m_GameEndPopupAlpha = 0f;
+                Debug.Log("[MutinyHUD] HUD-CORNER-04 online match quit to title", this);
+                return true;
+            }
+
+            bool twoPlayer = LevelController != null &&
+                             MutinyLevelController.IsVersusGameMode(LevelController.ActiveGameMode);
             bool returned = twoPlayer
                 ? frontend.ReturnToTwoPlayerLevelSelect()
                 : frontend.ReturnToSinglePlayerLevelSelect();
@@ -1214,35 +1277,16 @@ namespace Mutiny.Presentation
             if (m_Team2Panel != null)
                 GUI.DrawTexture(ResolveOriginalTeam2PanelRect(), m_Team2Panel, ScaleMode.StretchToFill, true);
 
-            Texture2D opponentPortrait = ResolveOpponentPortrait();
-            if (opponentPortrait != null)
-                GUI.DrawTexture(ResolveOpponentPortraitRect(opponentPortrait),
-                    opponentPortrait, ScaleMode.StretchToFill, true);
-        }
-
-        private void EnsureOpponentPortraits()
-        {
-            if (m_OpponentPortraits.Length > 0) return;
-            m_OpponentPortraits = Resources.LoadAll<Texture2D>("UI/BattleHUD/Opponents");
-            Array.Sort(m_OpponentPortraits, (a, b) => ParseNumericTextureName(a).CompareTo(ParseNumericTextureName(b)));
-        }
-
-        public Texture2D ResolveOpponentPortrait()
-        {
-            // The extension's single-player 16 overlaps original two-player 1
-            // in the legacy visual table; resolve its mode-local identity first.
-            if (LevelController != null && LevelController.CurrentLevelId.Equals(
-                new MutinyLevelId(MutinyGameMode.SinglePlayer, 16)))
+            int level = LevelController != null ? LevelController.CurrentLevelIndex : 1;
+            if (m_OpponentPortraits.Length > 0)
             {
-                if (m_RobotPortrait == null)
-                    m_RobotPortrait = LoadPointTexture("Art/Characters/Preview/Robot");
-                if (m_RobotPortrait != null) return m_RobotPortrait;
+                int portraitIndex = Mathf.Clamp(level - 1, 0, m_OpponentPortraits.Length - 1);
+                if (m_OpponentPortraits[portraitIndex] != null)
+                {
+                    GUI.DrawTexture(ResolveOriginalTeam2PortraitRect(),
+                        m_OpponentPortraits[portraitIndex], ScaleMode.StretchToFill, true);
+                }
             }
-
-            EnsureOpponentPortraits();
-            if (m_OpponentPortraits.Length == 0) return null;
-            int level = LevelController != null ? LevelController.OriginalLevelIndex : 1;
-            return m_OpponentPortraits[Mathf.Clamp(level - 1, 0, m_OpponentPortraits.Length - 1)];
         }
 
         public static Rect ResolveOriginalTeam1PanelRect()
@@ -1281,20 +1325,6 @@ namespace Mutiny.Presentation
                 OriginalTeamOriginY + 1f - 44f, 40f, 58f);
         }
 
-        public static Rect ResolveOpponentPortraitRect(Texture2D portrait)
-        {
-            if (portrait == null || (portrait.width == 40 && portrait.height == 58))
-                return ResolveOriginalTeam2PortraitRect();
-
-            // For custom opponent portraits (such as Robot 32x36 preview texture in single-player 16),
-            // align the portrait's optical center with the socket center (+50, +1).
-            // Robot texture is 32x36 with visible head center at (16, 20).
-            float centerX = portrait.width * 0.5f;
-            float centerY = portrait.height > 32 ? 20f : portrait.height * 0.5f;
-            return new Rect(OriginalTeam2OriginX + 50f - centerX,
-                OriginalTeamOriginY + 1f - centerY, portrait.width, portrait.height);
-        }
-
         private void DrawOriginalMap()
         {
             MutinyLevelData level = GetMapLevelData();
@@ -1310,7 +1340,7 @@ namespace Mutiny.Presentation
             if (m_CachedMapTexture != null)
                 GUI.DrawTexture(mapRect, m_CachedMapTexture, ScaleMode.StretchToFill, true);
 
-            MutinyTreasureChest[] chests = FindObjectsByType<MutinyTreasureChest>();
+            MutinyTreasureChest[] chests = FindObjectsByType<MutinyTreasureChest>(FindObjectsSortMode.None);
             for (int i = 0; i < chests.Length; i++)
             {
                 MutinyTreasureChest chest = chests[i];
@@ -1549,6 +1579,11 @@ namespace Mutiny.Presentation
                 return;
 
             if (PlayerInput == null || m_ActionPanelAlpha <= 0f)
+                return;
+
+            // A LAN peer only ever sees its own menu: the opponent's weapons are
+            // never drawn here, let alone made clickable.
+            if (!MutinyNetworkManager.IsLocalTeam(TurnManager.CurrentTeam.TeamNumber))
                 return;
 
             MutinyCharacter selectedChar = TurnManager.CurrentTeam.SelectedCharacter;
@@ -1954,7 +1989,7 @@ namespace Mutiny.Presentation
                 if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(restartRect, GUIContent.none, GUIStyle.none, "result-restartRect", controllerEnabled: alpha >= 1f))
                     MutinyTransitionManager.RequestTransition(() => RestartFromGameEndPopup(), showLoading: true);
                 if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(backRect, GUIContent.none, GUIStyle.none, "result-back", true, alpha >= 1f))
-                    MutinyTransitionManager.RequestTransition(() => BackToModeLevelSelect(), showLoading: false);
+                    MutinyTransitionManager.RequestTransition(() => BackFromVersusResult(), showLoading: false);
             }
             else if (complete)
             {
@@ -2094,6 +2129,22 @@ namespace Mutiny.Presentation
                 m_GameEndPopupKind == MutinyGameEndPopupKind.VersusDraw;
             if (!m_GameEndPopupShow || !canRestart || LevelController == null)
                 return false;
+
+            // Online matches restart through the host so both peers re-seed
+            // together; the MatchStart that follows rebuilds this board too.
+            if (LevelController.ActiveGameMode == MutinyGameMode.OnlineTwoPlayer)
+            {
+                MutinyFrontendController frontend = FrontendController != null
+                    ? FrontendController : FindAnyObjectByType<MutinyFrontendController>();
+                if (frontend == null)
+                    return false;
+                m_GameEndPopupShow = false;
+                m_GameEndPopupAlpha = 0f;
+                MutinyDebugLog.Info("HUD",
+                    $"END-POP-06 online restart requested level={LevelController.CurrentLevelIndex}", this);
+                frontend.RequestOnlineRestart();
+                return true;
+            }
 
             m_GameEndPopupShow = false;
             m_GameEndPopupAlpha = 0f;

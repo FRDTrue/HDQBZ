@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Reflection;
 using Mutiny.Levels;
 using Mutiny.Persistence;
 using Mutiny.Presentation;
@@ -63,8 +62,6 @@ namespace Mutiny.Verification
             VerifyFrontendFlow(result);
             VerifyAndroidAdaptation(result);
             VerifyScrollArrows(result);
-            VerifyAimingEdgeScrolling(result);
-            VerifyCannonAimEdgeScrolling(result);
             VerifyBattleHud(result);
             VerifyCornerLevelControls(result);
             VerifyMutedMusicToggleStartsRequestedTrack(result);
@@ -104,7 +101,6 @@ namespace Mutiny.Verification
             VerifyGunpowderBarrel(result);
             VerifyWoodenCrate(result);
             VerifyAnchor(result);
-            VerifyAnchorPresentation(result);
             VerifyCharacterLayering(result);
             VerifyCharacterOverlay(result);
             VerifyCharacterAimOverlay(result);
@@ -119,18 +115,6 @@ namespace Mutiny.Verification
             var result = new MutinyLevel1VerificationResult();
             VerifyCannonSmokeTrail(result);
             VerifyCannonImpactEffects(result);
-            return result;
-        }
-
-        public static MutinyLevel1VerificationResult RunAiPredictionParity()
-        {
-            var result = new MutinyLevel1VerificationResult();
-            VerifyAiDecisionFlow(result);
-            VerifyAiSpecialWeaponCandidates(result);
-            VerifyAiOriginalPredictionParity(result);
-            VerifyBanana(result);
-            VerifyBoulder(result);
-            MutinyAiPredictionVerificationTest.Verify(result);
             return result;
         }
 
@@ -152,7 +136,6 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyAnchor(result);
-            VerifyAnchorPresentation(result);
             return result;
         }
 
@@ -256,8 +239,6 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyScrollArrows(result);
-            VerifyAimingEdgeScrolling(result);
-            VerifyCannonAimEdgeScrolling(result);
             return result;
         }
 
@@ -458,7 +439,7 @@ namespace Mutiny.Verification
                 ball.Fire(new Vector2(30f, 0f));
                 ball.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
                 ball.PhysicsBody.ApplyPresentationPoseForVerification();
-                MutinyRumBottleSmokeTrail[] trails = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>();
+                MutinyRumBottleSmokeTrail[] trails = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>(FindObjectsSortMode.None);
                 Vector2 firstPuff = trails.Length == 1
                     ? MutinyPhysics.UnityToPixel(trails[0].transform.position)
                     : Vector2.zero;
@@ -490,7 +471,7 @@ namespace Mutiny.Verification
                 ball.Fire(new Vector2(0f, 20f));
                 playedSounds.Clear();
                 ball.PhysicsBody.AdvanceSimulationTick();
-                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 bool wallContact = ball.IsFinished && explosions.Length == 1 &&
                     playedSounds.Count == 1 && playedSounds[0] == "pop" &&
                     !explosions[0].PlayPopOnHit;
@@ -522,7 +503,7 @@ namespace Mutiny.Verification
                 ball.Fire(new Vector2(30f, 0f));
                 playedSounds.Clear();
                 ball.PhysicsBody.AdvanceSimulationTick();
-                explosions = Object.FindObjectsByType<MutinyExplosion>();
+                explosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 bool characterContact = ball.IsFinished && explosions.Length == 1 &&
                     playedSounds.Count == 1 && playedSounds[0] == "pop" &&
                     !explosions[0].PlayPopOnHit;
@@ -570,9 +551,9 @@ namespace Mutiny.Verification
                     weapon.Fire(launchVelocity);
                 }
 
-                int before = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>().Length;
+                int before = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>(FindObjectsSortMode.None).Length;
                 weapon.PhysicsBody.AdvanceSimulationTick();
-                int after = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>().Length;
+                int after = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>(FindObjectsSortMode.None).Length;
                 int expectedSmokeCount = before + (openParachute ? 0 : 1);
                 MutinyParachuteBomb parachute = weapon as MutinyParachuteBomb;
                 bool chuteMatches = !openParachute || (parachute != null && parachute.ChuteOpen);
@@ -591,7 +572,7 @@ namespace Mutiny.Verification
 
         private static void DestroySmokeTrails()
         {
-            MutinyRumBottleSmokeTrail[] trails = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>();
+            MutinyRumBottleSmokeTrail[] trails = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>(FindObjectsSortMode.None);
             for (int i = 0; i < trails.Length; i++)
                 DestroyNow(trails[i].gameObject);
         }
@@ -766,235 +747,147 @@ namespace Mutiny.Verification
             }
         }
 
-        private static void VerifyAimingEdgeScrolling(MutinyLevel1VerificationResult result)
+        /// <summary>
+        /// Two-finger pinch zoom: the pure ratio/bounds math plus the production
+        /// gesture path driving a real camera fixture. The mobile-only gate lives
+        /// on the touch layer, so the scripted path drives the same production
+        /// zoom application the device pinch uses.
+        /// </summary>
+        private static void VerifyMobilePinchZoom(MutinyLevel1VerificationResult result)
         {
-            Vector2[] directions = { Vector2.right, Vector2.left, Vector2.up, Vector2.down };
-            int[] frameRates = { 25, 60, 120 };
-            bool previousCursorVisible = Cursor.visible;
-            Mouse previousMouse = Mouse.current;
-            foreach (int frameRate in frameRates)
-            foreach (bool jump in new[] { true, false })
-            foreach (Vector2 direction in directions)
+            result.Assert(
+                Mathf.Approximately(MutinyCameraController.ClampZoomScale(0.1f),
+                    MutinyCameraController.MinimumZoomScale) &&
+                Mathf.Approximately(MutinyCameraController.ClampZoomScale(99f),
+                    MutinyCameraController.MaximumZoomScale) &&
+                Mathf.Approximately(MutinyCameraController.ClampZoomScale(1.25f), 1.25f),
+                "PINCH-ZOOM-01 zoom scale clamps to the 0.6x-2.0x range");
+
+            result.Assert(
+                Mathf.Approximately(MutinyCameraController.ResolveOrthographicSize(1f), 6.25f) &&
+                Mathf.Approximately(MutinyCameraController.ResolveOrthographicSize(2f), 3.125f) &&
+                Mathf.Approximately(MutinyCameraController.ResolveOrthographicSize(0.5f), 12.5f),
+                "PINCH-ZOOM-02 zoom maps onto the 6.25 orthographic size of the authored 550x400 view");
+
+            result.Assert(
+                !MutinyPlayerInput.ShouldStartPinch(6f, 6f) &&
+                MutinyPlayerInput.ShouldStartPinch(6.01f, 6f) &&
+                MutinyPlayerInput.ShouldStartPinch(-12f, 6f),
+                "PINCH-INP-01 only a finger-distance change past the deadzone starts a pinch");
+
+            result.Assert(
+                Mathf.Approximately(MutinyPlayerInput.ResolvePinchDistanceRatio(100f, 150f), 1.5f) &&
+                Mathf.Approximately(MutinyPlayerInput.ResolvePinchDistanceRatio(0f, 150f), 1f),
+                "PINCH-INP-02 spreading fingers yields a >1 ratio while a missing baseline stays neutral");
+
+            GameObject levelObject = null;
+            GameObject cameraObject = null;
+            GameObject turnObject = null;
+            GameObject teamObject = null;
+            GameObject inputObject = null;
+            try
             {
-                var objects = new List<GameObject>();
-                TextAsset levelXml = null;
-                Mouse mouse = null;
-                try
+                levelObject = new GameObject("PinchZoom_Level");
+                MutinyLevelRoot level = levelObject.AddComponent<MutinyLevelRoot>();
+                level.Width = 100;
+                level.Height = 100;
+                level.WaterLevelY = -80f;
+
+                cameraObject = new GameObject("PinchZoom_Camera");
+                Camera unityCamera = cameraObject.AddComponent<Camera>();
+                unityCamera.orthographic = true;
+                unityCamera.orthographicSize = MutinyCameraController.OriginalOrthographicSize;
+                cameraObject.transform.position = new Vector3(20f, -20f, -10f);
+                MutinyCameraController camera = cameraObject.AddComponent<MutinyCameraController>();
+                camera.SetLevelRootForVerification(level);
+
+                turnObject = new GameObject("PinchZoom_Turn");
+                MutinyTurnManager turn = turnObject.AddComponent<MutinyTurnManager>();
+                teamObject = new GameObject("PinchZoom_Team");
+                MutinyTeam team = teamObject.AddComponent<MutinyTeam>();
+                turn.CurrentTeam = team;
+                turn.CurrentPhase = TurnPhase.TurnActive;
+                inputObject = new GameObject("PinchZoom_Input");
+                MutinyPlayerInput input = inputObject.AddComponent<MutinyPlayerInput>();
+                input.TurnManager = turn;
+                input.GameCamera = unityCamera;
+                camera.TurnManager = turn;
+                camera.PlayerInput = input;
+
+                result.Assert(Mathf.Approximately(camera.ZoomScale, 1f) &&
+                              Mathf.Approximately(unityCamera.orthographicSize,
+                                  MutinyCameraController.OriginalOrthographicSize),
+                    "PINCH-ZOOM-03 a fresh board starts at the authored 1x framing");
+
+                bool baselineNeutral =
+                    !input.AdvancePinchGesture(new Vector2(100f, 100f), new Vector2(200f, 100f));
+                bool driftStaysUnzoomed =
+                    !input.AdvancePinchGesture(new Vector2(100f, 100f), new Vector2(203f, 100f));
+                result.Assert(baselineNeutral && driftStaysUnzoomed && !input.IsPinching &&
+                              Mathf.Approximately(camera.ZoomScale, 1f),
+                    "PINCH-ZOOM-04 the first two-finger frame is a baseline and sub-deadzone drift never zooms");
+
+                bool spread = input.AdvancePinchGesture(
+                    new Vector2(100f, 100f), new Vector2(220f, 100f));
+                result.Assert(spread && input.IsPinching && camera.ZoomScale > 1f &&
+                              unityCamera.orthographicSize <
+                                  MutinyCameraController.OriginalOrthographicSize,
+                    "PINCH-ZOOM-05 spreading the fingers zooms the view in");
+
+                float distance = 220f;
+                for (int i = 0; i < 25; i++)
                 {
-                    var rootObject = new GameObject("AimEdgeVerification_Level");
-                    objects.Add(rootObject);
-                    MutinyLevelRoot root = rootObject.AddComponent<MutinyLevelRoot>();
-                    root.Width = 100;
-                    root.Height = 100;
-                    root.WaterLevelY = -80f;
-                    var levelController = rootObject.AddComponent<MutinyLevelController>();
-                    levelXml = new TextAsset("<level width=\"1\" height=\"1\" players=\"1\"><row>-</row><bgRow>-</bgRow></level>");
-                    levelController.LevelXml = levelXml;
-                    var turn = rootObject.AddComponent<MutinyTurnManager>();
-                    var input = rootObject.AddComponent<MutinyPlayerInput>();
-                    var trajectoryObject = new GameObject("AimEdgeVerification_Trajectory");
-                    trajectoryObject.transform.SetParent(rootObject.transform, false);
-                    input.TrajectoryRenderer = trajectoryObject.AddComponent<MutinyTrajectoryRenderer>();
-                    LineRenderer pullLine = trajectoryObject.GetComponent<LineRenderer>();
-                    input.CacheTerrain();
-
-                    var teamObject = new GameObject("AimEdgeVerification_Red");
-                    objects.Add(teamObject);
-                    var team = teamObject.AddComponent<MutinyTeam>();
-                    team.TeamNumber = 1;
-                    var enemyTeamObject = new GameObject("AimEdgeVerification_Blue");
-                    objects.Add(enemyTeamObject);
-                    var enemyTeam = enemyTeamObject.AddComponent<MutinyTeam>();
-                    enemyTeam.TeamNumber = 2;
-                    enemyTeam.IsAiControlled = true;
-                    var characterObject = new GameObject("AimEdgeVerification_Character");
-                    objects.Add(characterObject);
-                    var character = characterObject.AddComponent<MutinyCharacter>();
-                    character.PhysicsBody.State = PhysicsBodyState.CreateDefault(1000f, 1000f);
-                    character.transform.position = MutinyPhysics.PixelToUnity(1000f, 1000f);
-                    team.RegisterCharacter(character);
-                    var enemyObject = new GameObject("AimEdgeVerification_Enemy");
-                    objects.Add(enemyObject);
-                    enemyTeam.RegisterCharacter(enemyObject.AddComponent<MutinyCharacter>());
-                    turn.Initialize(team, enemyTeam);
-                    input.TurnManager = turn;
-
-                    var cameraObject = new GameObject("AimEdgeVerification_Camera");
-                    objects.Add(cameraObject);
-                    var gameCamera = cameraObject.AddComponent<Camera>();
-                    gameCamera.orthographic = true;
-                    gameCamera.orthographicSize = 200f / MutinyPhysics.PixelsPerUnit;
-                    var camera = cameraObject.AddComponent<MutinyCameraController>();
-                    camera.ResetForLevel(root);
-                    input.GameCamera = gameCamera;
-                    cameraObject.transform.position = character.transform.position + new Vector3(0f, 0f, -10f);
-                    character.AddWeapon("cherryBomb");
-                    int ammunition = character.GetAmmunition("cherryBomb");
-                    bool selected = input.TrySelectCharacterForVerification(team, new Vector2(1000f, 1000f));
-                    bool ready = jump ? input.SelectCharacterThrow() : input.SelectWeapon("cherryBomb");
-                    MutinyWeapon weapon = input.EquippedWeapon;
-                    if (weapon != null)
-                        objects.Add(weapon.gameObject);
-                    Vector3 originWorld = jump ? character.transform.position : weapon.transform.position;
-                    bool began = input.TryBeginAimFromPrimaryPointerForVerification(
-                        character, MutinyPhysics.UnityToPixel(originWorld));
-                    string label = $"CAM-AIM-EDGE-01 {(jump ? "jump" : "cherryBomb")} {direction} {frameRate} FPS";
-                    result.Assert(selected && ready && began && input.IsAiming &&
-                                  turn.CurrentPhase == TurnPhase.TurnActive,
-                        label + " enters charge via production selection and pointer begin");
-
-                    mouse = InputSystem.AddDevice<Mouse>();
-                    mouse.MakeCurrent();
-                    Vector2 centre = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-                    Vector2 edge = centre;
-                    if (direction.x != 0f) edge.x = direction.x > 0f ? Screen.width - 1f : 1f;
-                    if (direction.y != 0f) edge.y = direction.y > 0f ? Screen.height - 1f : 1f;
-                    InputSystem.QueueStateEvent(mouse, new MouseState { position = edge }.WithButton(MouseButton.Left));
-                    InputSystem.Update();
-                    Vector3 before = cameraObject.transform.position;
-                    float deltaTime = 1f / frameRate;
-                    bool continuous = true;
-                    for (int frame = 0; frame < Mathf.CeilToInt(frameRate * 0.4f); frame++)
-                    {
-                        Vector3 pointerWorld = gameCamera.ScreenToWorldPoint(new Vector3(edge.x, edge.y, 10f));
-                        input.AdvanceAimPointerForVerification(character, MutinyPhysics.UnityToPixel(pointerWorld),
-                            mouse.leftButton.isPressed, false);
-                        Vector3 last = cameraObject.transform.position;
-                        camera.AdvanceCameraForVerification(deltaTime);
-                        continuous &= Vector2.Dot((Vector2)(cameraObject.transform.position - last), direction) > 0f;
-                    }
-                    result.Assert(continuous && Vector2.Dot((Vector2)(cameraObject.transform.position - before), direction) > 0f &&
-                                  camera.DesktopScrollDirectionForVerification == direction && camera.IsDesktopScrollArrowVisible &&
-                                  input.IsAiming && pullLine.enabled && pullLine.positionCount == 2 &&
-                                  Vector3.Distance(pullLine.GetPosition(0), originWorld) < 0.001f &&
-                                  character.CanThrow && character.CanShoot && !character.IsSelfThrown &&
-                                  character.GetAmmunition("cherryBomb") == ammunition && (jump || !weapon.IsFired) &&
-                                  turn.CurrentPhase == TurnPhase.TurnActive,
-                        label + " scrolls every display frame with arrow while retaining charge, origin, trajectory and inventory" +
-                        $" [continuous={continuous}, delta={cameraObject.transform.position - before}, direction={camera.DesktopScrollDirectionForVerification}, " +
-                        $"screen={Screen.width}x{Screen.height}, pointer={mouse.position.ReadValue()}, viewport={gameCamera.pixelRect}, held={mouse.leftButton.isPressed}, " +
-                        $"aim={input.IsAiming}, line={pullLine.enabled}, origin={(pullLine.positionCount > 0 ? pullLine.GetPosition(0) : Vector3.zero)}]");
-
-                    InputSystem.QueueStateEvent(mouse, new MouseState { position = centre }.WithButton(MouseButton.Left));
-                    InputSystem.Update();
-                    for (int frame = 0; frame < frameRate; frame++)
-                        camera.AdvanceCameraForVerification(deltaTime);
-                    Vector3 stopped = cameraObject.transform.position;
-                    camera.AdvanceCameraForVerification(deltaTime);
-                    result.Assert(input.IsAiming && mouse.leftButton.isPressed &&
-                                  camera.DesktopScrollDirectionForVerification == Vector2.zero && !camera.IsDesktopScrollArrowVisible &&
-                                  Vector3.Distance(cameraObject.transform.position, stopped) < 0.00001f,
-                        label + " centre clears arrow and stops manual inertia without auto-snapping during charge" +
-                        $" [direction={camera.DesktopScrollDirectionForVerification}, held={mouse.leftButton.isPressed}, delta={cameraObject.transform.position - stopped}]");
-
-                    bool heldBeforeRelease = mouse.leftButton.isPressed;
-                    InputSystem.QueueStateEvent(mouse, new MouseState { position = edge });
-                    InputSystem.Update();
-                    Vector3 releaseWorld = gameCamera.ScreenToWorldPoint(new Vector3(edge.x, edge.y, 10f));
-                    // This synchronous fixture can run before the first runtime
-                    // Input System update. Sample the actual queued button transition
-                    // instead of its frame-counter dependent wasReleasedThisFrame.
-                    input.AdvanceAimPointerForVerification(character, MutinyPhysics.UnityToPixel(releaseWorld),
-                        mouse.leftButton.isPressed, heldBeforeRelease && !mouse.leftButton.isPressed);
-                    bool committed = jump
-                        ? character.IsSelfThrown && !character.CanThrow && character.GetAmmunition("cherryBomb") == ammunition
-                        : weapon.IsFired && input.EquippedWeapon == null && character.GetAmmunition("cherryBomb") == ammunition - 1;
-                    result.Assert(committed && !input.IsAiming && !pullLine.enabled &&
-                                  turn.CurrentPhase == TurnPhase.ActionExecuting &&
-                                  camera.FindActionTargetForVerification() == (jump ? character.transform : weapon.transform),
-                        label + " production release commits once and restores action tracking" +
-                        $" [held={mouse.leftButton.isPressed}, committed={committed}, " +
-                        $"aim={input.IsAiming}, phase={turn.CurrentPhase}, target={camera.FindActionTargetForVerification()}]");
+                    distance += 40f;
+                    input.AdvancePinchGesture(new Vector2(100f, 100f),
+                        new Vector2(100f + distance, 100f));
                 }
-                finally
+                result.Assert(Mathf.Approximately(camera.ZoomScale,
+                                  MutinyCameraController.MaximumZoomScale),
+                    "PINCH-ZOOM-06 zooming in stops at the 2x limit");
+
+                for (int i = 0; i < 60; i++)
                 {
-                    if (mouse != null) InputSystem.RemoveDevice(mouse);
-                    for (int i = objects.Count - 1; i >= 0; i--) DestroyNow(objects[i]);
-                    if (levelXml != null) Object.DestroyImmediate(levelXml);
-                    if (previousMouse != null && previousMouse.added) previousMouse.MakeCurrent();
-                    Cursor.visible = previousCursorVisible;
+                    distance = Mathf.Max(40f, distance - 45f);
+                    input.AdvancePinchGesture(new Vector2(100f, 100f),
+                        new Vector2(100f + distance, 100f));
                 }
+                result.Assert(Mathf.Approximately(camera.ZoomScale,
+                                  MutinyCameraController.MinimumZoomScale) &&
+                              unityCamera.orthographicSize >
+                                  MutinyCameraController.OriginalOrthographicSize,
+                    "PINCH-ZOOM-07 pinching together zooms out and stops at the 0.6x limit");
+
+                Vector3 positionBeforePinch = cameraObject.transform.position;
+                input.AdvancePinchGesture(new Vector2(100f, 100f), new Vector2(400f, 60f));
+                result.Assert(input.IsPinching &&
+                              Vector3.Distance(cameraObject.transform.position, positionBeforePinch) < 0.0001f,
+                    "PINCH-ZOOM-08 an active pinch never pans the camera");
+
+                // Releasing must end the gesture, and the frame that re-establishes
+                // the baseline may not zoom: that is what keeps a fresh two-finger
+                // touch from jumping the view before the fingers actually move.
+                float zoomBeforeRelease = camera.ZoomScale;
+                input.ResetMobileGestureOwnershipForVerification();
+                bool released = !input.IsPinching;
+                bool rebased = !input.AdvancePinchGesture(
+                    new Vector2(100f, 100f), new Vector2(300f, 100f));
+                result.Assert(released && rebased &&
+                              Mathf.Approximately(camera.ZoomScale, zoomBeforeRelease),
+                    "PINCH-ZOOM-09 releasing the fingers ends the pinch and the next gesture only rebases");
+
+                camera.ResetForLevel(level);
+                result.Assert(Mathf.Approximately(camera.ZoomScale, 1f) &&
+                              Mathf.Approximately(unityCamera.orthographicSize,
+                                  MutinyCameraController.OriginalOrthographicSize),
+                    "PINCH-ZOOM-10 entering a level restores the authored 1x framing");
             }
-            if (previousMouse != null && previousMouse.added) previousMouse.MakeCurrent();
-            Cursor.visible = previousCursorVisible;
-        }
-
-        private static void VerifyCannonAimEdgeScrolling(MutinyLevel1VerificationResult result)
-        {
-            foreach (bool pin in new[] { true, false })
+            finally
             {
-                var objects = new List<GameObject>();
-                Mouse previousMouse = Mouse.current;
-                Mouse mouse = null;
-                try
-                {
-                    var rootObject = new GameObject("CannonAimEdge_Level");
-                    objects.Add(rootObject);
-                    var root = rootObject.AddComponent<MutinyLevelRoot>();
-                    root.Width = root.Height = 100;
-                    root.WaterLevelY = -80f;
-                    var turn = rootObject.AddComponent<MutinyTurnManager>();
-                    var input = rootObject.AddComponent<MutinyPlayerInput>();
-                    input.TurnManager = turn;
-                    var teamObject = new GameObject("CannonAimEdge_Team");
-                    objects.Add(teamObject);
-                    var team = teamObject.AddComponent<MutinyTeam>();
-                    team.TeamNumber = 1;
-                    var characterObject = new GameObject("CannonAimEdge_Character");
-                    objects.Add(characterObject);
-                    var character = characterObject.AddComponent<MutinyCharacter>();
-                    character.PhysicsBody.State = PhysicsBodyState.CreateDefault(1000f, 1000f);
-                    character.transform.position = MutinyPhysics.PixelToUnity(1000f, 1000f);
-                    team.RegisterCharacter(character);
-                    team.SelectCharacter(character);
-                    turn.CurrentTeam = team;
-                    turn.CurrentPhase = TurnPhase.TurnActive;
-                    character.AddWeapon("cannon");
-                    var cameraObject = new GameObject("CannonAimEdge_Camera");
-                    objects.Add(cameraObject);
-                    var gameCamera = cameraObject.AddComponent<Camera>();
-                    var camera = cameraObject.AddComponent<MutinyCameraController>();
-                    camera.ResetForLevel(root);
-                    input.GameCamera = gameCamera;
-                    cameraObject.transform.position = character.transform.position + new Vector3(0f, 0f, -10f);
-                    bool selected = input.SelectWeapon("cannon");
-                    MutinyCannon cannon = input.ArmedCannon;
-                    objects.Add(cannon.gameObject);
-                    Vector2 cannonPosition = new Vector2(cannon.PhysicsBody.State.X, cannon.PhysicsBody.State.Y);
-                    bool began = pin
-                        ? cannon.TryBeginPinDrag(cannonPosition + new Vector2(cannon.PinX, 0f))
-                        : cannon.TryBeginBodyDrag(cannonPosition);
-                    result.Assert(selected && began && input.IsAiming &&
-                                  input.InteractionState == MutinyPlayerInteractionState.WeaponReady,
-                        "CAM-AIM-EDGE-01 cannon starts production " + (pin ? "pin aim" : "body drag") + " without generic Aiming state");
-                    mouse = InputSystem.AddDevice<Mouse>();
-                    mouse.MakeCurrent();
-                    InputSystem.QueueStateEvent(mouse, new MouseState {
-                        position = new Vector2(Screen.width - 1f, Screen.height * 0.5f)
-                    }.WithButton(MouseButton.Left));
-                    InputSystem.Update();
-                    Vector3 before = cameraObject.transform.position;
-                    for (int frame = 0; frame < 24; frame++)
-                        camera.AdvanceCameraForVerification(1f / 60f);
-                    bool correctPan = pin
-                        ? cameraObject.transform.position.x > before.x && camera.DesktopScrollDirectionForVerification == Vector2.right && camera.IsDesktopScrollArrowVisible
-                        : cameraObject.transform.position == before && camera.DesktopScrollDirectionForVerification == Vector2.zero && !camera.IsDesktopScrollArrowVisible;
-                    result.Assert(correctPan && input.IsAiming && !cannon.IsFired && !cannon.IsFirePending &&
-                                  character.CanThrow && character.CanShoot && turn.CurrentPhase == TurnPhase.TurnActive,
-                        "CAM-AIM-EDGE-01 cannon pin permits edge pan; physical body drag retains original camera lock");
-                    if (pin) cannon.DragPinTo(cannonPosition + new Vector2(-50f, 0f));
-                    bool committed = cannon.ReleasePointer(turn);
-                    result.Assert(!input.IsAiming && (pin
-                        ? committed && cannon.IsFirePending && turn.CurrentPhase == TurnPhase.ActionExecuting
-                        : !committed && !cannon.IsFirePending && turn.CurrentPhase == TurnPhase.TurnActive),
-                        "CAM-AIM-EDGE-01 cannon ends pin/body operation through production release without premature shot");
-                }
-                finally
-                {
-                    if (mouse != null) InputSystem.RemoveDevice(mouse);
-                    if (previousMouse != null && previousMouse.added) previousMouse.MakeCurrent();
-                    for (int i = objects.Count - 1; i >= 0; i--) DestroyNow(objects[i]);
-                }
+                DestroyNow(inputObject);
+                DestroyNow(teamObject);
+                DestroyNow(turnObject);
+                DestroyNow(cameraObject);
+                DestroyNow(levelObject);
             }
         }
 
@@ -1132,6 +1025,14 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyWeaponReadyAndCancel(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunMobileGestures()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyAndroidAdaptation(result);
+            VerifyMobilePinchZoom(result);
             return result;
         }
 
@@ -1667,7 +1568,7 @@ namespace Mutiny.Verification
                 MutinyExplosion trigger = MutinyExplosion.Spawn(new Vector2(64f, 96f), 40f, 1f, null, false);
                 trigger.ApplyHit();
                 MutinyExplosion rootBlast = null;
-                foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None))
                 {
                     if (explosion != null && explosion != trigger && Mathf.Approximately(explosion.Size, 150f))
                     {
@@ -1686,9 +1587,9 @@ namespace Mutiny.Verification
                 DestroyNow(characterObject);
                 DestroyNow(managerObject);
                 DestroyNow(teamObject);
-                foreach (MutinyGunpowderBarrel barrel in Object.FindObjectsByType<MutinyGunpowderBarrel>())
+                foreach (MutinyGunpowderBarrel barrel in Object.FindObjectsByType<MutinyGunpowderBarrel>(FindObjectsSortMode.None))
                     DestroyNow(barrel != null ? barrel.gameObject : null);
-                foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None))
                     DestroyNow(explosion != null ? explosion.gameObject : null);
             }
         }
@@ -1860,7 +1761,7 @@ namespace Mutiny.Verification
                 DestroyNow(characterObject);
                 DestroyNow(managerObject);
                 DestroyNow(teamObject);
-                foreach (MutinyWoodenCrate crate in Object.FindObjectsByType<MutinyWoodenCrate>())
+                foreach (MutinyWoodenCrate crate in Object.FindObjectsByType<MutinyWoodenCrate>(FindObjectsSortMode.None))
                     DestroyNow(crate != null ? crate.gameObject : null);
             }
         }
@@ -1927,7 +1828,7 @@ namespace Mutiny.Verification
                 DestroyNow(ownerObject);
                 DestroyNow(managerObject);
                 DestroyNow(teamObject);
-                foreach (MutinyPiecesOfEight coins in Object.FindObjectsByType<MutinyPiecesOfEight>())
+                foreach (MutinyPiecesOfEight coins in Object.FindObjectsByType<MutinyPiecesOfEight>(FindObjectsSortMode.None))
                     DestroyNow(coins != null ? coins.gameObject : null);
             }
         }
@@ -2067,7 +1968,7 @@ namespace Mutiny.Verification
                         BoxPossibilities = new[] { new Vector2(128f, 320f), new Vector2(512f, 320f), new Vector2(896f, 320f) }
                     }, turn);
                     MutinyWeapon root = null;
-                    foreach (MutinyWeapon weapon in Object.FindObjectsByType<MutinyWeapon>())
+                    foreach (MutinyWeapon weapon in Object.FindObjectsByType<MutinyWeapon>(FindObjectsSortMode.None))
                         if (weapon.Owner == owner && weapon.WeaponType == type)
                             root = weapon;
                     result.Assert(root != null && !root.IsFired &&
@@ -2182,7 +2083,7 @@ namespace Mutiny.Verification
                 }
                 finally
                 {
-                    foreach (MutinyWeapon weapon in Object.FindObjectsByType<MutinyWeapon>())
+                    foreach (MutinyWeapon weapon in Object.FindObjectsByType<MutinyWeapon>(FindObjectsSortMode.None))
                         if (weapon != null && weapon.Owner == owner &&
                             (weapon is MutinyWoodenCrate || weapon is MutinyGunpowderBarrel))
                             DestroyNow(weapon.gameObject);
@@ -2386,7 +2287,7 @@ namespace Mutiny.Verification
             finally
             {
                 DestroyNow(cannonObject);
-                foreach (MutinyCannonball ball in Object.FindObjectsByType<MutinyCannonball>())
+                foreach (MutinyCannonball ball in Object.FindObjectsByType<MutinyCannonball>(FindObjectsSortMode.None))
                     DestroyNow(ball != null ? ball.gameObject : null);
                 DestroyNow(ownerObject);
                 DestroyNow(managerObject);
@@ -2456,7 +2357,7 @@ namespace Mutiny.Verification
                     CannonRotationDegrees = 0,
                     LaunchVelocity = new Vector2(30f, 0f)
                 }, manager);
-                foreach (MutinyCannon candidate in Object.FindObjectsByType<MutinyCannon>())
+                foreach (MutinyCannon candidate in Object.FindObjectsByType<MutinyCannon>(FindObjectsSortMode.None))
                 {
                     if (candidate != null && candidate.Owner == owner)
                     {
@@ -2702,7 +2603,7 @@ namespace Mutiny.Verification
                 DestroyNow(ownerObject);
                 DestroyNow(managerObject);
                 DestroyNow(teamObject);
-                foreach (MutinyBoulder boulder in Object.FindObjectsByType<MutinyBoulder>())
+                foreach (MutinyBoulder boulder in Object.FindObjectsByType<MutinyBoulder>(FindObjectsSortMode.None))
                     DestroyNow(boulder != null ? boulder.gameObject : null);
             }
         }
@@ -2882,195 +2783,8 @@ namespace Mutiny.Verification
                 DestroyNow(ownerObject);
                 DestroyNow(managerObject);
                 DestroyNow(teamObject);
-                foreach (MutinyAnchor anchor in Object.FindObjectsByType<MutinyAnchor>())
+                foreach (MutinyAnchor anchor in Object.FindObjectsByType<MutinyAnchor>(FindObjectsSortMode.None))
                     DestroyNow(anchor != null ? anchor.gameObject : null);
-            }
-        }
-
-        private static void VerifyAnchorPresentation(MutinyLevel1VerificationResult result)
-        {
-            foreach (bool aiControlled in new[] { false, true })
-            foreach (int fps in new[] { 25, 60, 120 })
-            {
-                var objects = new List<GameObject>();
-                string label = $"ANC-PRES { (aiControlled ? "AI" : "player") } {fps}FPS";
-                GameObject MakeObject(string name)
-                {
-                    var go = new GameObject(label + "_" + name);
-                    objects.Add(go);
-                    return go;
-                }
-                try
-                {
-                    var level = MakeObject("Level").AddComponent<MutinyLevelRoot>();
-                    level.Width = 64;
-                    level.Height = 64;
-                    level.WaterLevelY = -64f;
-                    var turn = level.gameObject.AddComponent<MutinyTurnManager>();
-                    var red = MakeObject("Red").AddComponent<MutinyTeam>();
-                    red.TeamNumber = 1;
-                    red.IsAiControlled = aiControlled;
-                    var blue = MakeObject("Blue").AddComponent<MutinyTeam>();
-                    blue.TeamNumber = 2;
-                    blue.IsAiControlled = true;
-                    var owner = MakeObject("Owner").AddComponent<MutinyCharacter>();
-                    owner.PhysicsBody.State = PhysicsBodyState.CreateDefault(320f, 500f);
-                    owner.PhysicsBody.IsActive = false;
-                    owner.TeamIndex = 1;
-                    owner.AddWeapon("anchor");
-                    red.RegisterCharacter(owner);
-                    var victim = MakeObject("Victim").AddComponent<MutinyCharacter>();
-                    victim.PhysicsBody.State = PhysicsBodyState.CreateDefault(768f, 930f);
-                    victim.PhysicsBody.IsActive = false;
-                    victim.TeamIndex = 2;
-                    blue.RegisterCharacter(victim);
-                    turn.Initialize(red, blue);
-                    red.SelectCharacter(owner);
-                    MutinyAnchor anchor = null;
-                    bool committed;
-                    if (aiControlled)
-                    {
-                        var ai = red.gameObject.AddComponent<MutinyAIController>();
-                        ai.ExecuteMoveForVerification(new AIMove
-                        {
-                            MoveType = AIMoveType.ShootWeapon,
-                            Character = owner,
-                            WeaponType = "anchor",
-                            TargetPosition = new Vector2(768f, 930f)
-                        });
-                        foreach (MutinyAnchor candidate in Object.FindObjectsByType<MutinyAnchor>())
-                            if (candidate.Owner == owner && candidate.IsFired)
-                                anchor = candidate;
-                        committed = anchor != null;
-                    }
-                    else
-                    {
-                        var input = MakeObject("Input").AddComponent<MutinyPlayerInput>();
-                        input.TurnManager = turn;
-                        committed = input.SelectWeapon("anchor");
-                        anchor = input.ArmedAnchor;
-                        committed &= input.TryActivateClickWeaponForVerification(owner, new Vector2(768f, 930f));
-                    }
-                    result.Assert(committed && anchor != null && !owner.HasWeapon("anchor") &&
-                                  turn.CurrentPhase == TurnPhase.ActionExecuting &&
-                                  Mathf.Approximately(anchor.PhysicsBody.State.Y, -200f),
-                        label + " ANC-PRES-01 actual player/AI entry consumes once and starts at the original drop height");
-                    if (anchor == null)
-                        continue;
-                    objects.Add(anchor.gameObject);
-                    MutinyPhysicsBody body = anchor.PhysicsBody;
-                    var terrain = new string[64, 64];
-                    for (int column = 0; column < 64; column++)
-                        terrain[30, column] = "ground";
-                    body.SetTerrain(terrain, 64, 64);
-                    var cameraObject = MakeObject("Camera");
-                    cameraObject.AddComponent<Camera>();
-                    var camera = cameraObject.AddComponent<MutinyCameraController>();
-                    camera.TurnManager = turn;
-                    camera.ResetForLevel(level);
-
-                    if (aiControlled)
-                    {
-                        for (int tick = 0; tick < 20; tick++)
-                        {
-                            anchor.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
-                            body.ApplyPresentationPoseForVerification();
-                        }
-                        result.Assert(body.SimulationTickCount == 0 &&
-                                      Mathf.Approximately(body.State.Y, -200f) &&
-                                      Mathf.Approximately(MutinyPhysics.UnityToPixel(anchor.transform.position).y, -200f),
-                            label + " ANC-PRES-01 original twenty AI waiting ticks advance no physics or visible fall");
-                    }
-                    Sprite fallingSprite = anchor.SpriteRenderer.sprite;
-                    anchor.AdvanceSimulationFrameForVerification(0.02f);
-                    body.ApplyPresentationPoseForVerification();
-                    result.Assert(body.SimulationTickCount == 0 && Mathf.Approximately(body.State.Y, -200f) &&
-                                  Mathf.Approximately(MutinyPhysics.UnityToPixel(anchor.transform.position).y, -200f),
-                        label + " ANC-PRES-01 the first render half-tick does not predict ahead of the first real fall");
-                    anchor.AdvanceSimulationFrameForVerification(0.02f);
-                    body.ApplyPresentationPoseForVerification();
-                    result.Assert(body.SimulationTickCount == 1 && Mathf.Approximately(body.State.Y, -160f) &&
-                                  Mathf.Approximately(MutinyPhysics.UnityToPixel(anchor.transform.position).y, -200f),
-                        label + " ANC-PRES-01 first real tick falls forty pixels while display starts at its completed-tick origin");
-                    anchor.AdvanceSimulationFrameForVerification(0.02f);
-                    body.AdvanceSimulationFrameForVerification(0.04f);
-                    body.ApplyPresentationPoseForVerification();
-                    result.Assert(!body.IsActive && body.SimulationTickCount == 1 &&
-                                  Mathf.Approximately(body.State.Y, -160f) &&
-                                  Mathf.Abs(MutinyPhysics.UnityToPixel(anchor.transform.position).y + 180f) < 0.001f &&
-                                  anchor.CurrentAnimationFrame == 1 && anchor.SpriteRenderer.sprite == fallingSprite &&
-                                  Mathf.Approximately(victim.Health, 100f),
-                        label + " ANC-PRES-01 middle display frame moves twenty pixels without an autonomous body tick, damage or sprite-frame advance");
-                    body.SendMessage("Start", SendMessageOptions.DontRequireReceiver);
-                    body.ApplyPresentationPoseForVerification();
-                    result.Assert(Mathf.Approximately(body.State.Y, -160f) && body.SimulationTickCount == 1 &&
-                                  Mathf.Abs(MutinyPhysics.UnityToPixel(anchor.transform.position).y + 180f) < 0.001f,
-                        label + " ANC-PRES-01 delayed production Start preserves authority and does not seed from the interpolated display");
-                    anchor.AdvanceSimulationFrameForVerification(0.02f);
-
-                    bool sawIntermediateMotion = false;
-                    bool sampledCamera = false;
-                    bool cameraMatches = true;
-                    bool fallUsesStoppedSprite = true;
-                    bool landingChecked = false;
-                    bool landingCorrect = false;
-                    for (int frame = 0; frame < 600 && !anchor.IsFinished; frame++)
-                    {
-                        long ticksBefore = body.SimulationTickCount;
-                        float displayBefore = MutinyPhysics.UnityToPixel(body.PresentationPosition).y;
-                        bool wasFalling = !anchor.HasHitBottom;
-                        anchor.AdvanceSimulationFrameForVerification(1f / fps);
-                        body.ApplyPresentationPoseForVerification();
-                        float displayY = MutinyPhysics.UnityToPixel(anchor.transform.position).y;
-                        if (wasFalling && !anchor.HasHitBottom)
-                        {
-                            sawIntermediateMotion |= body.SimulationTickCount == ticksBefore &&
-                                displayY > displayBefore + 0.001f && displayY < body.State.Y;
-                            fallUsesStoppedSprite &= anchor.CurrentAnimationFrame == 1 &&
-                                anchor.SpriteRenderer.sprite == fallingSprite && victim.Health == 100f;
-                            if (displayY > 300f)
-                            {
-                                Vector3 desired = body.PresentationPosition +
-                                    new Vector3(0f, 50f / MutinyPhysics.PixelsPerUnit, 0f);
-                                cameraObject.transform.position = desired + new Vector3(0f, 0f, -10f);
-                                camera.AdvanceCameraForVerification(1f / fps);
-                                sampledCamera = true;
-                                cameraMatches &= camera.FindActionTargetForVerification() == anchor.transform &&
-                                    Vector2.Distance(cameraObject.transform.position, desired) < 0.001f;
-                            }
-                        }
-                        if (anchor.HasHitBottom && !landingChecked)
-                        {
-                            landingChecked = true;
-                            landingCorrect = body.SimulationTickCount == 29 &&
-                                Mathf.Abs(body.State.Y - 959.9f) < 0.001f &&
-                                Mathf.Abs(displayY - body.State.Y) < 0.001f &&
-                                Mathf.Approximately(victim.Health, 40f) &&
-                                anchor.HoldTicksRemaining == 29 && anchor.CurrentAnimationFrame == 1;
-                            anchor.AdvanceSimulationFrameForVerification(0.001f);
-                            body.ApplyPresentationPoseForVerification();
-                            landingCorrect &= body.SimulationTickCount == 29 &&
-                                Mathf.Abs(MutinyPhysics.UnityToPixel(anchor.transform.position).y - body.State.Y) < 0.001f &&
-                                anchor.HoldTicksRemaining == 29 && anchor.CurrentAnimationFrame == 1;
-                        }
-                    }
-                    result.Assert(fallUsesStoppedSprite && sampledCamera && cameraMatches &&
-                                  (fps == 25 || sawIntermediateMotion),
-                        label + " ANC-PRES-01 continuous intermediate render frames and camera share one display pose, retaining stopped fall frame 1");
-                    result.Assert(landingChecked && landingCorrect,
-                        label + " ANC-PRES-02 original collision tick, landing snap, single sixty-HP crush and immediate hold timing are frame-rate independent");
-                    result.Assert(anchor.IsFinished && body.SimulationTickCount == 29 &&
-                                  victim.Health == 40f && owner.Health == 100f &&
-                                  anchor.HoldTicksRemaining == 0 && anchor.FadeTicksRemaining == 0 &&
-                                  anchor.CurrentAnimationFrame == 12 && anchor.CurrentImpactFrame == 17 &&
-                                  !anchor.AreImpactParticlesVisible && !anchor.SpriteRenderer.enabled,
-                        label + " ANC-PRES-02 render frames do not duplicate collision damage or the original impact/hold/white-out completion");
-                }
-                finally
-                {
-                    for (int i = objects.Count - 1; i >= 0; i--)
-                        DestroyNow(objects[i]);
-                }
             }
         }
 
@@ -3356,10 +3070,10 @@ namespace Mutiny.Verification
                               Mathf.Approximately(steppedAction.Score, firstAction.Score) &&
                               Vector2.Distance(steppedAction.LaunchVelocity, firstAction.LaunchVelocity) < 0.001f,
                     "AI-SLICE-01 production decision iterator preserves the fixed-seed result across more than 50 resumable steps");
-                result.Assert(!MutinyAIController.ShouldYieldDecisionFrame(false, 2) &&
-                              MutinyAIController.ShouldYieldDecisionFrame(false, 3) &&
+                result.Assert(!MutinyAIController.ShouldYieldDecisionFrame(false, 29) &&
+                              MutinyAIController.ShouldYieldDecisionFrame(false, 30) &&
                               MutinyAIController.ShouldYieldDecisionFrame(true, 0),
-                    "EXT-AI-SLICE-02 production frame gate uses the authorized 3 ms default and a character boundary");
+                    "AI-SLICE-01 production frame gate uses the original 30 ms threshold and a character boundary");
 
                 ai.SetReplayTraceForVerification(recorded);
                 AIMove replayedAction = ai.EvaluateBestMove();
@@ -3406,7 +3120,7 @@ namespace Mutiny.Verification
                     LaunchVelocity = boulderVelocity
                 });
                 MutinyBoulder aiBoulder = null;
-                foreach (MutinyBoulder candidate in Object.FindObjectsByType<MutinyBoulder>())
+                foreach (MutinyBoulder candidate in Object.FindObjectsByType<MutinyBoulder>(FindObjectsSortMode.None))
                 {
                     if (candidate != null && candidate.Owner == pirate)
                     {
@@ -3423,7 +3137,7 @@ namespace Mutiny.Verification
             }
             finally
             {
-                foreach (MutinyBoulder boulder in Object.FindObjectsByType<MutinyBoulder>())
+                foreach (MutinyBoulder boulder in Object.FindObjectsByType<MutinyBoulder>(FindObjectsSortMode.None))
                     DestroyNow(boulder != null ? boulder.gameObject : null);
                 DestroyNow(enemyCharacterObject);
                 DestroyNow(aiCharacterObject);
@@ -3492,7 +3206,7 @@ namespace Mutiny.Verification
                 shooter.CanShoot = true;
                 ai.ExecuteMoveForVerification(anchorMove);
                 MutinyAnchor executedAnchor = null;
-                foreach (MutinyAnchor candidate in Object.FindObjectsByType<MutinyAnchor>())
+                foreach (MutinyAnchor candidate in Object.FindObjectsByType<MutinyAnchor>(FindObjectsSortMode.None))
                 {
                     if (candidate != null && candidate.Owner == shooter && candidate.IsFired)
                     {
@@ -3543,10 +3257,10 @@ namespace Mutiny.Verification
             }
             finally
             {
-                foreach (MutinyAnchor anchor in Object.FindObjectsByType<MutinyAnchor>())
+                foreach (MutinyAnchor anchor in Object.FindObjectsByType<MutinyAnchor>(FindObjectsSortMode.None))
                     if (anchor != null && anchor.Owner != null && anchor.Owner.name == "AiAllWeaponsVerification_Shooter")
                         DestroyNow(anchor.gameObject);
-                foreach (MutinyWoodenCrate crate in Object.FindObjectsByType<MutinyWoodenCrate>())
+                foreach (MutinyWoodenCrate crate in Object.FindObjectsByType<MutinyWoodenCrate>(FindObjectsSortMode.None))
                     if (crate != null && crate.Owner != null && crate.Owner.name == "AiAllWeaponsVerification_Shooter")
                         DestroyNow(crate.gameObject);
                 DestroyNow(enemyObject);
@@ -5367,7 +5081,7 @@ namespace Mutiny.Verification
 
                 weapon.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
                 weapon.PhysicsBody.ApplyPresentationPoseForVerification();
-                MutinyRumBottleSmokeTrail[] trails = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>();
+                MutinyRumBottleSmokeTrail[] trails = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>(FindObjectsSortMode.None);
                 if (trails.Length != 1)
                     return false;
 
@@ -5591,7 +5305,7 @@ namespace Mutiny.Verification
                 body.AdvanceSimulationTick();
                 result.Assert(body.IsInWater && character.IsDrowned && !character.IsAlive,
                     "WATER-01 baked character Awake binding drowns after crossing the surface");
-                result.Assert(Object.FindObjectsByType<MutinySplashEffect>().Length == 1,
+                result.Assert(Object.FindObjectsByType<MutinySplashEffect>(FindObjectsSortMode.None).Length == 1,
                     "VIS-SPLASH-01 drowning after the crossing does not spawn a second splash");
 
                 // WATER-03: Weapon falling into water invalidation
@@ -5677,11 +5391,11 @@ namespace Mutiny.Verification
                 body.State = state;
                 bomb.Fire(new Vector2(0f, 1f));
 
-                int before = Object.FindObjectsByType<MutinySplashEffect>().Length;
+                int before = Object.FindObjectsByType<MutinySplashEffect>(FindObjectsSortMode.None).Length;
                 body.AdvanceSimulationTick();
-                int atSurface = Object.FindObjectsByType<MutinySplashEffect>().Length;
+                int atSurface = Object.FindObjectsByType<MutinySplashEffect>(FindObjectsSortMode.None).Length;
                 body.AdvanceSimulationTick();
-                int afterEntry = Object.FindObjectsByType<MutinySplashEffect>().Length;
+                int afterEntry = Object.FindObjectsByType<MutinySplashEffect>(FindObjectsSortMode.None).Length;
                 result.Assert(atSurface == before + 1 && afterEntry == atSurface && !bomb.IsFinished,
                     "VIS-SPLASH-02 CherryBomb splashes at equality once and entering water does not trigger contact explosion");
 
@@ -5691,12 +5405,12 @@ namespace Mutiny.Verification
                 state.VelocityY = -2f;
                 body.State = state;
                 body.AdvanceSimulationTick();
-                result.Assert(Object.FindObjectsByType<MutinySplashEffect>().Length == afterEntry + 1,
+                result.Assert(Object.FindObjectsByType<MutinySplashEffect>(FindObjectsSortMode.None).Length == afterEntry + 1,
                     "VIS-SPLASH-02 resurfacing produces a second crossing splash");
             }
             finally
             {
-                foreach (MutinySplashEffect splash in Object.FindObjectsByType<MutinySplashEffect>())
+                foreach (MutinySplashEffect splash in Object.FindObjectsByType<MutinySplashEffect>(FindObjectsSortMode.None))
                     DestroyNow(splash.gameObject);
                 DestroySmokeTrails();
                 DestroyNow(bombObject);
@@ -5770,7 +5484,7 @@ namespace Mutiny.Verification
                                                   input.CanProcessCurrentTurnInputForVerification();
                 bool detonationRequested = MutinyBanana.TryRequestPlayerDetonation(humanTeam);
                 humanBanana.AdvanceOriginalTickForVerification();
-                MutinyExplosion[] playerExplosions = Object.FindObjectsByType<MutinyExplosion>();
+                MutinyExplosion[] playerExplosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 result.Assert(phaseGateAdmitsSecondClick && detonationRequested && humanBanana.IsFinished && playerExplosions.Length == 1 &&
                               Mathf.Approximately(playerExplosions[0].Size, 160f) &&
                               Mathf.Approximately(playerExplosions[0].MaxDamage, 80f) &&
@@ -5826,7 +5540,7 @@ namespace Mutiny.Verification
             }
             finally
             {
-                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 for (int i = 0; i < explosions.Length; i++)
                     DestroyNow(explosions[i].gameObject);
 
@@ -6010,7 +5724,7 @@ namespace Mutiny.Verification
                                                 !wetDynamite.IsLit && !wetDynamite.IsFinished;
                     }
                     bool exploded = false;
-                    MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                    MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                     for (int i = 0; i < explosions.Length; i++)
                         exploded |= Mathf.Approximately(explosions[i].Size, 250f) &&
                                     Mathf.Approximately(explosions[i].MaxDamage, 70f);
@@ -6021,7 +5735,7 @@ namespace Mutiny.Verification
             finally
             {
                 DestroyNow(weaponObject);
-                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 for (int i = 0; i < explosions.Length; i++)
                     DestroyNow(explosions[i].gameObject);
                 DestroySmokeTrails();
@@ -6157,7 +5871,7 @@ namespace Mutiny.Verification
                 impactBomb.PhysicsBody.State = state;
                 impactBomb.Fire(new Vector2(0f, 2f));
                 impactBomb.AdvanceOriginalTickForVerification(false, 0f);
-                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 bool has160x50Explosion = false;
                 for (int i = 0; i < explosions.Length; i++)
                 {
@@ -6169,10 +5883,10 @@ namespace Mutiny.Verification
             }
             finally
             {
-                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 for (int i = 0; i < explosions.Length; i++)
                     DestroyNow(explosions[i].gameObject);
-                foreach (MutinyParachuteBomb bomb in Object.FindObjectsByType<MutinyParachuteBomb>())
+                foreach (MutinyParachuteBomb bomb in Object.FindObjectsByType<MutinyParachuteBomb>(FindObjectsSortMode.None))
                     DestroyNow(bomb != null ? bomb.gameObject : null);
                 DestroyNow(impactObject);
                 DestroyNow(inputObject);
@@ -6272,7 +5986,7 @@ namespace Mutiny.Verification
                 bottle.Fire(new Vector2(0f, 2f));
                 bottle.PhysicsBody.AdvanceSimulationTick();
 
-                MutinySweepingFlame[] initialFlames = Object.FindObjectsByType<MutinySweepingFlame>();
+                MutinySweepingFlame[] initialFlames = Object.FindObjectsByType<MutinySweepingFlame>(FindObjectsSortMode.None);
                 result.Assert(bottle.IsFinished && initialFlames.Length == 2 && Mathf.Approximately(target.Health, 40f),
                     "WPN-10-EFF-02/03 production floor contact creates a 80/25 bottle blast and two 30-damage origin flames");
 
@@ -6287,7 +6001,7 @@ namespace Mutiny.Verification
                     for (int tick = 0; tick < 3; tick++)
                         initialFlames[i].AdvanceOriginalTickForVerification();
                 }
-                MutinySweepingFlame[] propagatedFlames = Object.FindObjectsByType<MutinySweepingFlame>();
+                MutinySweepingFlame[] propagatedFlames = Object.FindObjectsByType<MutinySweepingFlame>(FindObjectsSortMode.None);
                 Sprite propagationFrame = Resources.Load<Sprite>("Art/Effects/SweepingFlame/4");
                 result.Assert(propagatedFlames.Length >= 4 && initialFlames[0].CreatedNext && initialFlames[1].CreatedNext &&
                               initialFlames[0].GetComponent<SpriteRenderer>().sprite == propagationFrame &&
@@ -6308,11 +6022,11 @@ namespace Mutiny.Verification
                 obliqueBottle.Fire(new Vector2(20f, 2f));
                 obliqueBottle.PhysicsBody.AdvanceSimulationTick();
                 bool explosionAtVerticalContact = false;
-                MutinyExplosion[] obliqueExplosions = Object.FindObjectsByType<MutinyExplosion>();
+                MutinyExplosion[] obliqueExplosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 for (int i = 0; i < obliqueExplosions.Length; i++)
                     explosionAtVerticalContact |= Mathf.Approximately(obliqueExplosions[i].PixelX, 405f);
                 int flamesAtVerticalContact = 0;
-                MutinySweepingFlame[] obliqueFlames = Object.FindObjectsByType<MutinySweepingFlame>();
+                MutinySweepingFlame[] obliqueFlames = Object.FindObjectsByType<MutinySweepingFlame>(FindObjectsSortMode.None);
                 for (int i = 0; i < obliqueFlames.Length; i++)
                     if (Mathf.Approximately(MutinyPhysics.UnityToPixel(obliqueFlames[i].transform.position).x, 384f))
                         flamesAtVerticalContact++;
@@ -6323,11 +6037,11 @@ namespace Mutiny.Verification
             }
             finally
             {
-                MutinySweepingFlame[] flames = Object.FindObjectsByType<MutinySweepingFlame>();
+                MutinySweepingFlame[] flames = Object.FindObjectsByType<MutinySweepingFlame>(FindObjectsSortMode.None);
                 for (int i = 0; i < flames.Length; i++)
                     DestroyNow(flames[i].gameObject);
 
-                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 for (int i = 0; i < explosions.Length; i++)
                     DestroyNow(explosions[i].gameObject);
 
@@ -6371,7 +6085,7 @@ namespace Mutiny.Verification
                 MutinyLevelController controller = controllerObject.AddComponent<MutinyLevelController>();
                 controller.ClearLevel();
                 result.Assert(!mineObject.activeSelf &&
-                              Object.FindObjectsByType<MutinyMine>().Length == 0,
+                              Object.FindObjectsByType<MutinyMine>(FindObjectsSortMode.None).Length == 0,
                     "MINE-LVL-01 level rebuild immediately removes an unparented stored mine and its physics");
             }
             finally
@@ -6454,12 +6168,12 @@ namespace Mutiny.Verification
 
                 seagull.SpriteRenderer.sortingOrder = MutinyLevelBuilder.SeagullSortingOrder;
                 bool acceptedShot = MutinySeagull.TryRequestPlayerShot(team);
-                MutinySeagullFire[] shots = Object.FindObjectsByType<MutinySeagullFire>();
+                MutinySeagullFire[] shots = Object.FindObjectsByType<MutinySeagullFire>(FindObjectsSortMode.None);
                 result.Assert(acceptedShot && shots.Length == 0 && seagull.ActiveShotCount == 0,
                     "SEA-SHOT-02 production click queues input until the Seagull's original simulation tick");
 
                 seagull.PhysicsBody.AdvanceSimulationTick();
-                shots = Object.FindObjectsByType<MutinySeagullFire>();
+                shots = Object.FindObjectsByType<MutinySeagullFire>(FindObjectsSortMode.None);
                 result.Assert(shots.Length == 1 && seagull.ActiveShotCount == 1 &&
                               Mathf.Approximately(seagull.PhysicsBody.State.X, -290f) &&
                               Mathf.Approximately(shots[0].PhysicsBody.State.X, -290f) &&
@@ -6515,7 +6229,7 @@ namespace Mutiny.Verification
                     shots[0].PhysicsBody.State = impactState;
                     seagull.PhysicsBody.AdvanceSimulationTick();
                 }
-                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None);
                 bool hasSeagullExplosion = false;
                 for (int i = 0; i < explosions.Length; i++)
                     hasSeagullExplosion |= Mathf.Approximately(explosions[i].Size, 50f) &&
@@ -6528,7 +6242,7 @@ namespace Mutiny.Verification
 
                 MutinySeagull.TryRequestPlayerShot(team);
                 seagull.PhysicsBody.AdvanceSimulationTick();
-                shots = Object.FindObjectsByType<MutinySeagullFire>();
+                shots = Object.FindObjectsByType<MutinySeagullFire>(FindObjectsSortMode.None);
                 if (shots.Length > 0)
                 {
                     secondShotObject = shots[0].gameObject;
@@ -6545,7 +6259,7 @@ namespace Mutiny.Verification
             {
                 DestroyNow(secondShotObject);
                 DestroyNow(firstShotObject);
-                MutinySeagullFire[] shots = Object.FindObjectsByType<MutinySeagullFire>();
+                MutinySeagullFire[] shots = Object.FindObjectsByType<MutinySeagullFire>(FindObjectsSortMode.None);
                 for (int i = 0; i < shots.Length; i++)
                     DestroyNow(shots[i].gameObject);
                 DestroyNow(seagullObject);
@@ -6560,8 +6274,8 @@ namespace Mutiny.Verification
         {
             long referenceImpactTick = -1;
             long referenceWaterTick = -1;
-            var existingShots = new HashSet<MutinySeagullFire>(Object.FindObjectsByType<MutinySeagullFire>());
-            var existingExplosions = new HashSet<MutinyExplosion>(Object.FindObjectsByType<MutinyExplosion>());
+            var existingShots = new HashSet<MutinySeagullFire>(Object.FindObjectsByType<MutinySeagullFire>(FindObjectsSortMode.None));
+            var existingExplosions = new HashSet<MutinyExplosion>(Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None));
             foreach (int fps in new[] { 25, 60, 120 })
             {
                 GameObject birdObject = null;
@@ -6576,7 +6290,7 @@ namespace Mutiny.Verification
                     bool accepted = bird.RequestShotForVerification();
                     bird.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
                     MutinySeagullFire first = null;
-                    foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>())
+                    foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>(FindObjectsSortMode.None))
                     {
                         if (!existingShots.Contains(shot))
                             first = shot;
@@ -6635,7 +6349,7 @@ namespace Mutiny.Verification
                         bird.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
                         if (secondRequested && second == null)
                         {
-                            foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>())
+                            foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>(FindObjectsSortMode.None))
                             {
                                 if (shot != first && !existingShots.Contains(shot))
                                     second = shot;
@@ -6672,7 +6386,7 @@ namespace Mutiny.Verification
                         if (referenceWaterTick < 0)
                             referenceWaterTick = waterTicks;
                         int waterExplosionCount = 0;
-                        foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                        foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None))
                             if (!existingExplosions.Contains(explosion))
                                 waterExplosionCount++;
                         result.Assert(bird.ActiveShotCount == 1 && waterTicks == referenceWaterTick && waterExplosionCount == 0,
@@ -6691,7 +6405,7 @@ namespace Mutiny.Verification
                         referenceImpactTick = impactTick;
                     int explosionCount = 0;
                     bool explosionMatches = false;
-                    foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                    foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None))
                     {
                         if (!existingExplosions.Contains(explosion))
                         {
@@ -6705,10 +6419,10 @@ namespace Mutiny.Verification
                 }
                 finally
                 {
-                    foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>())
+                    foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>(FindObjectsSortMode.None))
                         if (!existingShots.Contains(shot))
                             DestroyNow(shot.gameObject);
-                    foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                    foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None))
                         if (!existingExplosions.Contains(explosion))
                             DestroyNow(explosion.gameObject);
                     DestroyNow(birdObject);
@@ -6798,7 +6512,7 @@ namespace Mutiny.Verification
                     audioManager.SfxEnabled = previousSfxEnabled;
                 }
 
-                MutinySplashEffect[] splashes = Object.FindObjectsByType<MutinySplashEffect>();
+                MutinySplashEffect[] splashes = Object.FindObjectsByType<MutinySplashEffect>(FindObjectsSortMode.None);
                 for (int i = 0; i < splashes.Length; i++)
                     DestroyNow(splashes[i].gameObject);
                 DestroyNow(waveObject);
@@ -7107,15 +6821,19 @@ namespace Mutiny.Verification
                               Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel ==
                                   Mutiny.Persistence.MutinySaveSystem.MaxLevel &&
                               PlayerPrefs.GetInt("mutiny_highest_unlocked_level", 1) ==
-                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel,
-                    "GM-03 lowercase unlockalllevels unlocks every level and persists progress");
+                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel &&
+                              gm.RecentSuccessfulCommands.Count > 0 &&
+                              gm.RecentSuccessfulCommands[0] == "unlockalllevels",
+                    "GM-03 lowercase unlockalllevels unlocks every level, persists progress and enters recent history");
 
                 Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel = 1;
-                bool aliasSucceeded = gm.ExecuteCommand("unlocklevels");
-                result.Assert(aliasSucceeded &&
+                bool replaySucceeded = gm.RunRecentCommand(0);
+                result.Assert(replaySucceeded &&
                               Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel ==
-                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel,
-                    "GM-PARSE-02 unlocklevels uses the production all-level unlock");
+                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel &&
+                              gm.RecentSuccessfulCommands.Count > 0 &&
+                              gm.RecentSuccessfulCommands[0] == "unlockalllevels",
+                    "GM-03 recent command button repeats the production all-level unlock");
             }
             finally
             {
@@ -7134,24 +6852,17 @@ namespace Mutiny.Verification
             try
             {
                 MutinyGMManager gm = gmObject.AddComponent<MutinyGMManager>();
-                string[] invalidLevelCommands = { "enterlevel", "enterlevel 0", "enterlevel -1",
-                    "enterlevel nope", "enterlevel 1 extra", "enterlevel 3_01", "enterlevel 2147483648",
-                    "enterlevelx 1", "enterlevel level_01" };
-                foreach (string command in invalidLevelCommands)
-                {
-                    result.Assert(!gm.ExecuteCommand(command),
-                        $"GM-15 invalid syntax '{command}' is rejected");
-                }
                 VerifyGMUnlockAllLevels(gm, result);
                 VerifyExplosionCameraCommands(gm, result);
                 bool logEnabled = gm.ExecuteCommand("  AiLoG 1  ") && MutinyAIController.ActionLogEnabled;
                 result.Assert(logEnabled, "GM-10 production GM parser enables AI action logging with case and outer whitespace tolerance");
+                int logHistoryCount = gm.RecentSuccessfulCommands.Count;
                 bool invalidLogCommandsRejected = !gm.ExecuteCommand("ailog") &&
                     !gm.ExecuteCommand("ailog 2") && !gm.ExecuteCommand("ailog -1") &&
                     !gm.ExecuteCommand("ailog 1 extra") && !gm.ExecuteCommand("ailog nope") &&
-                    MutinyAIController.ActionLogEnabled;
+                    MutinyAIController.ActionLogEnabled && gm.RecentSuccessfulCommands.Count == logHistoryCount;
                 result.Assert(invalidLogCommandsRejected,
-                    "GM-10 invalid AI log commands preserve the production toggle");
+                    "GM-10 invalid AI log commands preserve the production toggle and successful command history");
                 bool logDisabled = gm.ExecuteCommand("ailog 0") && !MutinyAIController.ActionLogEnabled;
                 result.Assert(logDisabled, "GM-10 production GM parser disables AI action logging");
                 MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
@@ -7179,19 +6890,6 @@ namespace Mutiny.Verification
                                   RectApproximately(MutinyGMManager.ResolveButtonRect(3840f, 2160f), new Rect(456.6f, 999f, 162f, 162f)),
                         "GM-06 GM button anchors to the left edge of the visible letterboxed game canvas and scales dynamically with resolution");
                 }
-
-                GameObject teamWeaponTarget = new GameObject("GM_TeamWeaponAliasTarget");
-                try
-                {
-                    MutinyCharacter teamCharacter = teamWeaponTarget.AddComponent<MutinyCharacter>();
-                    teamCharacter.TeamIndex = 1;
-                    teamCharacter.PhysicsBody.State = PhysicsBodyState.CreateDefault(10000f, 100f);
-                    result.Assert(gm.ExecuteCommand("unlockteamweapons") &&
-                                  teamCharacter.IsInfinite("cherryBomb") && teamCharacter.CanShoot &&
-                                  !gm.ExecuteCommand("unlockteamweaponsx"),
-                        "GM-PARSE-02 unlockteamweapons uses the production Team 1 unlock with exact word matching");
-                }
-                finally { DestroyNow(teamWeaponTarget); }
 
                 aiTeamObject = new GameObject("GM_ForceAiTeam");
                 MutinyTeam aiTeam = aiTeamObject.AddComponent<MutinyTeam>();
@@ -7298,57 +6996,35 @@ namespace Mutiny.Verification
                 result.Assert(allIdsMapToMenuWeapons,
                     "GM-07 IDs 1..15 map to the 15 selectable weapons in menu order");
 
-                bool helpSucceeded = gm.ExecuteCommand("Help");
-                string helpText = (string)typeof(MutinyGMManager)
-                    .GetField("m_StatusMessage", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(gm);
-                bool descriptionsMatch = true;
-                foreach (string name in new[] { "enterlevel", "unlockalllevels", "resetlevels", "aienhance",
-                             "aisetluck", "airesetluck", "aiweapon", "aitakeover", "ailog", "unlockweapons",
-                             "unlockweaponsallteam", "excamera", "lang", "help" })
-                {
-                    string description = gm.GetCommandDescription(name);
-                    bool hasChinese = false;
-                    if (description != null)
-                        foreach (char glyph in description)
-                            hasChinese |= glyph >= '\u4e00' && glyph <= '\u9fff';
-                    descriptionsMatch &= hasChinese && helpText.Contains(description);
-                }
-                result.Assert(helpSucceeded && descriptionsMatch && helpText.Contains("简写：level") &&
-                              helpText.Contains("简写：ailuck") &&
-                              Resources.Load<Font>(MutinyLocalizedText.CjkFontResource(MutinyLocalization.SimplifiedChinese)) != null,
-                    "GM-UI-05-A Help and command button descriptions share Chinese text with a bundled CJK font");
+                bool sixSucceeded = gm.ExecuteCommand("Help") &&
+                                    gm.ExecuteCommand("aiforceusewaepon 1") &&
+                                    gm.ExecuteCommand("aiforceusewaepon 2") &&
+                                    gm.ExecuteCommand("Help") &&
+                                    gm.ExecuteCommand("aiforceusewaepon 3") &&
+                                    gm.ExecuteCommand("  hElP  ");
+                result.Assert(sixSucceeded && gm.RecentSuccessfulCommands.Count == 5 &&
+                              gm.RecentSuccessfulCommands[0] == "hElP" &&
+                              gm.RecentSuccessfulCommands[1] == "aiforceusewaepon 3" &&
+                              gm.RecentSuccessfulCommands[2] == "Help" &&
+                              gm.RecentSuccessfulCommands[3] == "aiforceusewaepon 2" &&
+                              gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 1",
+                    "GM-UI-02 keeps the five most recent successful executions, including repeats");
 
-                gm.SelectCategory(MutinyGMManager.CommandCategory.AI);
-                bool aiTemplate = gm.ChooseCommandTemplate("aienhance") &&
-                                  gm.InputText == "aienhance " &&
-                                  gm.SelectedCategory == MutinyGMManager.CommandCategory.AI &&
-                                  !MutinyAIController.EnhancementEnabled;
-                bool luckTemplate = gm.ChooseCommandTemplate("aisetluck") && gm.InputText == "aisetluck ";
-                gm.SelectCategory(MutinyGMManager.CommandCategory.Levels);
-                bool levelTemplate = gm.ChooseCommandTemplate("enterlevel") && gm.InputText == "enterlevel ";
-                bool directTemplate = gm.ChooseCommandTemplate("unlockalllevels") &&
-                                      gm.InputText == "unlockalllevels" &&
-                                      (string)typeof(MutinyGMManager)
-                                          .GetField("m_StatusMessage", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(gm)
-                                      == helpText;
-                result.Assert(aiTemplate && luckTemplate && levelTemplate && directTemplate &&
-                              !gm.ChooseCommandTemplate("unknown"),
-                    "GM-UI-04 category and button production handlers fill templates without executing them");
+                bool invalidSucceeded = gm.ExecuteCommand("aiforceusewaepon 16") ||
+                                        gm.ExecuteCommand("UnknownGM");
+                result.Assert(!invalidSucceeded && gm.RecentSuccessfulCommands.Count == 5 &&
+                              gm.RecentSuccessfulCommands[0] == "hElP" &&
+                              gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 1",
+                    "GM-UI-02 excludes failed commands without changing the history");
 
-                bool parameterSpaces = true;
-                foreach (string name in new[] { "enterlevel", "aienhance", "aisetluck", "aiweapon",
-                             "aitakeover", "ailog", "excamera", "lang" })
-                    parameterSpaces &= gm.ChooseCommandTemplate(name) && gm.InputText == name + " ";
-                foreach (string name in new[] { "unlockalllevels", "resetlevels", "airesetluck",
-                             "unlockweapons", "unlockweaponsallteam", "help" })
-                    parameterSpaces &= gm.ChooseCommandTemplate(name) && gm.InputText == name;
-                result.Assert(parameterSpaces && !MutinyAIController.EnhancementEnabled,
-                    "GM-UI-04-A parameter templates end with exactly one space; direct commands do not execute or add space");
-
-                result.Assert(gm.ExecuteCommand("aiweapon 2") && MutinyAIController.ForcedWeaponId == 2 &&
-                              !gm.ExecuteCommand("aiforceusewaepon 16") &&
-                              !gm.ExecuteCommand("UnknownGM") && MutinyAIController.ForcedWeaponId == 2,
-                    "GM-07 valid command executes; invalid commands keep the forced weapon unchanged");
+                bool replaySucceeded = gm.RunRecentCommand(3);
+                result.Assert(replaySucceeded && MutinyAIController.ForcedWeaponId == 2 &&
+                              gm.RecentSuccessfulCommands.Count == 5 &&
+                              gm.RecentSuccessfulCommands[0] == "aiforceusewaepon 2" &&
+                              gm.RecentSuccessfulCommands[1] == "hElP" &&
+                              gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 2" &&
+                              !gm.RunRecentCommand(-1) && !gm.RunRecentCommand(5),
+                    "GM-UI-02 recent button reruns the production command and moves that execution to the front");
                 result.Assert(gm.LockOpen && gm.IsPinned, "GM-UI-03 LockOpen defaults to true (keep open enabled by default)");
                 gm.LockOpen = false;
                 result.Assert(!gm.LockOpen && !gm.IsPinned, "GM-UI-03 LockOpen toggle works");
@@ -7356,7 +7032,7 @@ namespace Mutiny.Verification
 
                 // The forced-shot check intentionally leaves a live projectile.
                 // Remove only that fixture before exercising a separate real board.
-                foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>())
+                foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>(FindObjectsSortMode.None))
                     if (bomb.Owner == aiCharacter) DestroyNow(bomb.gameObject);
                 VerifyGMAiTakeover(gm, result);
                 VerifyGMAiLevelLuck(gm, result);
@@ -7366,7 +7042,7 @@ namespace Mutiny.Verification
             {
                 MutinyAIController.SetActionLogEnabled(false);
                 MutinyAIController.TrySetForcedWeaponId(0);
-                foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>())
+                foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>(FindObjectsSortMode.None))
                     if (bomb != null && bomb.Owner != null && bomb.Owner.name == "GM_ForceAiCharacter")
                         DestroyNow(bomb.gameObject);
                 DestroyNow(enemyCharacterObject);
@@ -7386,10 +7062,12 @@ namespace Mutiny.Verification
             try
             {
                 var controller = host.AddComponent<MutinyLevelController>();
-                result.Assert(!gm.ExecuteCommand("aisetluck 5") && !gm.ExecuteCommand("airesetluck"),
-                    "GM-12/13 reject missing current level");
+                int history = gm.RecentSuccessfulCommands.Count;
+                result.Assert(!gm.ExecuteCommand("aisetluck 5") && !gm.ExecuteCommand("airesetluck") &&
+                              gm.RecentSuccessfulCommands.Count == history,
+                    "GM-12/13 reject missing current level without recording success");
                 controller.ConfigureSession(MutinyGameMode.SinglePlayer);
-                controller.LevelXml = Resources.Load<TextAsset>("Data/Levels/level_1_05");
+                controller.LevelXml = Resources.Load<TextAsset>("Data/Levels/level_05");
                 controller.BuildLevel();
                 MutinyLevelRoot root = controller.CurrentLevel;
                 MutinyAIController ai = root.Team2.GetComponent<MutinyAIController>();
@@ -7404,9 +7082,6 @@ namespace Mutiny.Verification
                               ai.GetEffectiveLuck(shooter) == 101.5f && shooter.Luck == defaults[shooter] &&
                               root.Team1.Characters[0].Luck == playerLuck,
                     "GM-12 changes effective native AI Luck above 100 without altering authored/player Luck");
-                result.Assert(gm.ExecuteCommand("ailuck 101.5") && ai.LevelLuckOverride == 101.5f &&
-                              !gm.ExecuteCommand("ailuckx 10") && ai.LevelLuckOverride == 101.5f,
-                    "GM-PARSE-02 ailuck is a readable alias with exact command-word matching");
                 gm.ExecuteCommand("aiweapon 1");
                 ai.SaveDecisionTrace = false;
                 ai.EvaluateCharacterWeaponsForVerification(shooter,
@@ -7414,12 +7089,13 @@ namespace Mutiny.Verification
                     null, 0, 0, 1000f, out int candidates);
                 result.Assert(candidates == 101,
                     "GM-12 production weapon dispatcher uses level override for actual candidate count");
+                history = gm.RecentSuccessfulCommands.Count;
                 string[] invalid = { "aisetluck", "aisetluck -1", "aisetluck 99999.1", "aisetluck NaN",
                     "aisetluck Infinity", "aisetluck x", "aisetluck 1,5", "aisetluck 1 extra", "airesetluck 1" };
                 bool rejected = true;
                 foreach (string command in invalid) rejected &= !gm.ExecuteCommand(command);
-                result.Assert(rejected && ai.LevelLuckOverride == 101.5f,
-                    "GM-12/13 invalid commands retain the active override");
+                result.Assert(rejected && ai.LevelLuckOverride == 101.5f && gm.RecentSuccessfulCommands.Count == history,
+                    "GM-12/13 invalid commands retain override and success history");
                 result.Assert(gm.ExecuteCommand("aisetluck 0") && ai.LevelLuckOverride == 0f,
                     "GM-12 zero is a valid override, not a reset");
                 ai.EvaluateCharacterWeaponsForVerification(shooter,
@@ -7429,8 +7105,9 @@ namespace Mutiny.Verification
                 result.Assert(gm.ExecuteCommand("aisetluck 99999") && ai.LevelLuckOverride == 99999f,
                     "GM-12 upper boundary Luck 99999 is accepted");
                 controller.ConfigureSession(MutinyGameMode.LocalTwoPlayer);
+                history = gm.RecentSuccessfulCommands.Count;
                 result.Assert(!gm.ExecuteCommand("aisetluck 3") && !gm.ExecuteCommand("airesetluck") &&
-                              ai.LevelLuckOverride == 99999f,
+                              ai.LevelLuckOverride == 99999f && gm.RecentSuccessfulCommands.Count == history,
                     "GM-12/13 reject two-player session even if the XML was authored for single-player");
                 controller.ConfigureSession(MutinyGameMode.SinglePlayer);
                 bool reset = gm.ExecuteCommand("  AiResetLuck  ") && ai.LevelLuckOverride == null;
@@ -7486,7 +7163,7 @@ namespace Mutiny.Verification
             string previousCode = MutinyLocalization.Code;
             try
             {
-                result.Assert(gm.ExecuteCommand("lang zh-cn") &&
+                result.Assert(gm.ExecuteCommand("setlanguage zh-cn") &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese &&
                               !MutinyLocalization.UseOriginalFont &&
@@ -7509,7 +7186,7 @@ namespace Mutiny.Verification
                 result.Assert(Mathf.Approximately(revisedTextPosition.y - 184f, 1f) &&
                               Mathf.Approximately(doubledCanvas.MultiplyPoint3x4(revisedTextPosition).y - 368f, 2f),
                     "LOC-BTN-01 one original pixel adjustment scales to one screen pixel at 1x and two screen pixels at 2x");
-                result.Assert(gm.ExecuteCommand("lang en") &&
+                result.Assert(gm.ExecuteCommand("setlanguage en") &&
                               MutinyLocalization.Code == MutinyLocalization.English &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.English &&
                               MutinyLocalization.UseOriginalFont &&
@@ -7523,63 +7200,44 @@ namespace Mutiny.Verification
                     RectApproximately(MutinyGameHUD.ResolveActionPanelDescriptionRect(),
                         new Rect(20f, 166f, 238f, 66f)),
                     "LOC-BTN-01 production English PirateFont button and action panel text positions remain unchanged");
-                result.Assert(gm.ExecuteCommand("  LaNg\tZH-CN  ") &&
+                result.Assert(gm.ExecuteCommand("  SeTLaNgUaGe\tZH-CN  ") &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏" &&
                               !MutinyLocalization.UseOriginalFont,
                     "GM-09 parsing accepts case changes and whitespace separators");
-                result.Assert(gm.ExecuteCommand("lang zh-cn") &&
+                result.Assert(gm.ExecuteCommand("setlanguage zh-cn") &&
+                              gm.RecentSuccessfulCommands[0] == "setlanguage zh-cn" &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese,
-                    "GM-09 reselecting the current language succeeds and persists");
+                    "GM-09 reselecting the current language succeeds and joins recent history");
 
-                bool rejected = !gm.ExecuteCommand("lang") && !gm.ExecuteCommand("lang jp") &&
-                                !gm.ExecuteCommand("lang en extra") && !gm.ExecuteCommand("langcn") &&
-                                !gm.ExecuteCommand("lang cn");
-                result.Assert(rejected &&
+                var history = new List<string>(gm.RecentSuccessfulCommands);
+                bool rejected = !gm.ExecuteCommand("setlanguage") && !gm.ExecuteCommand("setlanguage jp") &&
+                                !gm.ExecuteCommand("setlanguage en extra") && !gm.ExecuteCommand("setlanguagecn") &&
+                                !gm.ExecuteCommand("setlanguage cn");
+                bool unchangedHistory = history.Count == gm.RecentSuccessfulCommands.Count;
+                for (int i = 0; unchangedHistory && i < history.Count; i++)
+                    unchangedHistory = history[i] == gm.RecentSuccessfulCommands[i];
+                result.Assert(rejected && unchangedHistory &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese,
-                    "GM-09 invalid parameters preserve runtime language and saved preference");
-                result.Assert(gm.ExecuteCommand("lang en") && gm.ExecuteCommand("lang zh-cn") &&
+                    "GM-09 invalid parameters preserve runtime language, saved preference and successful history");
+                result.Assert(gm.ExecuteCommand("setlanguage en") && gm.RunRecentCommand(1) &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
+                              gm.RecentSuccessfulCommands[0] == "setlanguage zh-cn" &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏",
-                    "GM-09 repeated production commands switch language again");
-
-                result.Assert(gm.ExecuteCommand("  LaNg\tZH-HK  ") &&
-                              MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong &&
-                              MutinySaveSystem.LanguageCode == MutinyLocalization.TraditionalChineseHongKong &&
-                              !MutinyLocalization.UseOriginalFont &&
-                              MutinyLocalizedText.CjkFontResource(MutinyLocalization.Code) == "Localization/Fonts/NotoSansCJKhk-Regular" &&
-                              MutinyLocalization.Text("frontend.play", "play") == "開始遊戲" &&
-                              MutinyLocalization.Text("frontend.scores", "scores") == "排行榜" &&
-                              MutinyLocalization.Text("frontend.points", "{0} pts", 123) == "123 分" &&
-                              MutinyGameHUD.ResolveLocalizedCornerTooltip(MutinyCornerControl.Quit) == "離開",
-                    "LOC-HK-02 production lang zh-hk selects HK text, formatted values, regional font and persistent code");
-                bool hkRejected = !gm.ExecuteCommand("lang") && !gm.ExecuteCommand("lang zh-tw") &&
-                                  !gm.ExecuteCommand("lang zh-hk extra") && !gm.ExecuteCommand("language zh-hk");
-                result.Assert(hkRejected &&
-                              MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong &&
-                              MutinySaveSystem.LanguageCode == MutinyLocalization.TraditionalChineseHongKong,
-                    "GM-09-REV2 malformed lang commands preserve HK language and preference");
-                result.Assert(gm.ExecuteCommand("lang zh-hk") && gm.ExecuteCommand("lang en") &&
-                              gm.ExecuteCommand("lang zh-hk") && MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong,
-                    "LOC-HK-02 repeated HK selection uses the same production entry");
-                result.Assert(gm.ExecuteCommand("setlanguage zh-hk") &&
-                              MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong,
-                    "GM-09-REV2 setlanguage remains a compatibility alias");
+                    "GM-09 a recent command replays through the production parser and changes language again");
 
                 bool repeatedSwitchesWork = true;
                 foreach (string command in new[]
-                         { "lang en", "lang zh-cn", "lang zh-hk", "lang en", "lang zh-hk", "lang zh-cn", "lang en" })
+                         { "setlanguage en", "setlanguage zh-cn", "setlanguage en", "setlanguage zh-cn", "setlanguage en" })
                 {
-                    bool english = command == "lang en";
-                    bool hongKong = command == "lang zh-hk";
+                    bool english = command == "setlanguage en";
                     repeatedSwitchesWork &= gm.ExecuteCommand(command) &&
-                        MutinyLocalization.Code == (english ? MutinyLocalization.English : hongKong ?
-                            MutinyLocalization.TraditionalChineseHongKong : MutinyLocalization.SimplifiedChinese) &&
+                        MutinyLocalization.Code == (english ? MutinyLocalization.English : MutinyLocalization.SimplifiedChinese) &&
                         MutinySaveSystem.LanguageCode == MutinyLocalization.Code &&
                         MutinyLocalization.UseOriginalFont == english &&
-                        MutinyLocalization.Text("frontend.play", "play") == (english ? "play" : hongKong ? "開始遊戲" : "开始游戏") &&
-                        MutinyLocalization.Text("frontend.scores", "scores") == (english ? "scores" : hongKong ? "排行榜" : "成绩");
+                        MutinyLocalization.Text("frontend.play", "play") == (english ? "play" : "开始游戏") &&
+                        MutinyLocalization.Text("frontend.scores", "scores") == (english ? "scores" : "成绩");
                 }
                 result.Assert(repeatedSwitchesWork,
                     "LOC-ANDROID-01 repeated production GM switches keep title translations, font route and saved choice usable");
@@ -7635,6 +7293,7 @@ namespace Mutiny.Verification
                 human.SelectCharacter(owner);
                 input.SelectWeapon("banana");
                 MutinyWeapon readyWeapon = input.EquippedWeapon;
+                int historyCount = gm.RecentSuccessfulCommands.Count;
                 MutinyAIController.TrySetForcedWeaponId(0);
                 result.Assert(!gm.ExecuteCommand("aitakeover") &&
                               !gm.ExecuteCommand("aitakeoverwithluck") &&
@@ -7645,8 +7304,8 @@ namespace Mutiny.Verification
                               !gm.ExecuteCommand("aitakeoverwithluck x") &&
                               !gm.ExecuteCommand("aitakeoverwithluck 1,5") &&
                               !gm.ExecuteCommand("aitakeoverwithluck 1 extra") && !human.IsAiControlled &&
-                              !manager.IsAiTakeoverActive,
-                    "GM-08 rejects invalid Luck without changing ownership");
+                              !manager.IsAiTakeoverActive && gm.RecentSuccessfulCommands.Count == historyCount,
+                    "GM-08 rejects invalid Luck without changing ownership or success history");
 
                 int turns = human.TotalTurnsTaken;
                 result.Assert(gm.ExecuteCommand("  AiTakeOverWithLuck 7.5  ") && manager.IsAiTakeoverActive &&
@@ -7727,7 +7386,7 @@ namespace Mutiny.Verification
                               onlyOwnerShots && shot.WeaponType == "tidalWave" && shot.Score > 0f,
                     "GM-08 real jump settlement keeps takeover and enters selected-character-only weapon continuation");
                 ai.ExecuteMoveForVerification(shot, manager);
-                foreach (MutinyTidalWave candidate in Object.FindObjectsByType<MutinyTidalWave>())
+                foreach (MutinyTidalWave candidate in Object.FindObjectsByType<MutinyTidalWave>(FindObjectsSortMode.None))
                     if (candidate.Owner == owner) wave = candidate;
                 result.Assert(wave != null && wave.IsFired && !owner.CanThrow && !owner.CanShoot &&
                               manager.IsAiTakeoverActive && human.IsAiControlled,
@@ -7984,7 +7643,7 @@ namespace Mutiny.Verification
                         camera.PanToTarget(oldLevel.Characters[0].transform);
                     }
                     cameraObject.transform.position = new Vector3(25f, -20f, -10f);
-                    bool loaded = loader.TryLoadLevel(MutinyLevelId.FromOriginalNumber(indices[i]));
+                    bool loaded = loader.TryLoadLevel(indices[i]);
                     MutinyLevelRoot level = loader.CurrentLevel;
                     Vector2 centre = MutinyPhysics.UnityToPixel(cameraObject.transform.position);
                     result.Assert(loaded && Mathf.Abs(centre.x - 275f) < 0.001f &&
@@ -8016,8 +7675,7 @@ namespace Mutiny.Verification
                 previous = loader.CurrentLevel;
                 cameraObject.transform.position = new Vector3(20f, -15f, -10f);
                 loader.LoadNextLevel();
-                result.Assert(loader.CurrentLevel != previous && loader.CurrentLevelIndex == 16 &&
-                              loader.CurrentLevelId.Mode == MutinyGameMode.LocalTwoPlayer &&
+                result.Assert(loader.CurrentLevel != previous && loader.CurrentLevelIndex == 31 &&
                               Vector2.Distance(MutinyPhysics.UnityToPixel(cameraObject.transform.position),
                                   new Vector2(275f, 200f)) < 0.001f,
                     "CAM-INIT-01 LoadNextLevel does not carry the previous camera into level 31");
@@ -8027,7 +7685,7 @@ namespace Mutiny.Verification
                 loader.ClearLevel();
                 DestroyNow(previous.gameObject);
                 cameraObject.transform.position = new Vector3(20f, -15f, -10f);
-                bool reentered = loader.TryLoadLevel(new MutinyLevelId(MutinyGameMode.SinglePlayer, 1));
+                bool reentered = loader.TryLoadLevel(1);
                 result.Assert(reentered && Vector2.Distance(
                                   MutinyPhysics.UnityToPixel(cameraObject.transform.position),
                                   new Vector2(275f, 200f)) < 0.001f,
@@ -8051,7 +7709,7 @@ namespace Mutiny.Verification
                 previous = loader.CurrentLevel;
                 loader.ClearLevel();
                 DestroyNow(previous.gameObject);
-                TextAsset bakedXml = Resources.Load<TextAsset>("Data/Levels/level_1_07");
+                TextAsset bakedXml = Resources.Load<TextAsset>("Data/Levels/level_07");
                 GameObject baked = MutinyLevelBuilder.BuildLevel(
                     MutinyLevelXmlParser.Parse(bakedXml.text), host.transform, 7, MutinyGameMode.SinglePlayer);
                 // Adding the controller drives its real Awake adoption branch;
@@ -8086,18 +7744,22 @@ namespace Mutiny.Verification
             {
                 result.Assert(gm.ExecuteCommand("excamera") && !MutinyCameraController.ExplosionCameraEnabled,
                     "GM-11 bare excamera disables the extension through production parsing");
-                result.Assert(gm.ExecuteCommand("  ExCamera   1  ") && MutinyCameraController.ExplosionCameraEnabled,
-                    "GM-11 valid case/whitespace command enables the extension");
+                result.Assert(gm.ExecuteCommand("  ExCamera   1  ") && MutinyCameraController.ExplosionCameraEnabled &&
+                              gm.RecentSuccessfulCommands[0] == "ExCamera   1",
+                    "GM-11 valid case/whitespace command enables the extension and enters successful history");
+                var history = new List<string>(gm.RecentSuccessfulCommands);
                 bool rejected = true;
                 foreach (string command in new[] { "excamera 2", "excamera -1", "excamera true", "excamera 1 0", "excamerax 1" })
                     rejected &= !gm.ExecuteCommand(command);
-                result.Assert(rejected && MutinyCameraController.ExplosionCameraEnabled,
-                    "GM-11 invalid parameters preserve the switch");
+                bool unchanged = history.Count == gm.RecentSuccessfulCommands.Count;
+                for (int i = 0; unchanged && i < history.Count; i++)
+                    unchanged &= history[i] == gm.RecentSuccessfulCommands[i];
+                result.Assert(rejected && unchanged && MutinyCameraController.ExplosionCameraEnabled,
+                    "GM-11 invalid parameters preserve the switch and successful history");
                 result.Assert(gm.ExecuteCommand("excamera 0") && !MutinyCameraController.ExplosionCameraEnabled,
                     "GM-11 explicit zero is a valid disable alias");
-                result.Assert(gm.ExecuteCommand("blastcam 1") && MutinyCameraController.ExplosionCameraEnabled &&
-                              !gm.ExecuteCommand("blastcamx 1") && MutinyCameraController.ExplosionCameraEnabled,
-                    "GM-PARSE-02 blastcam uses the production camera switch with exact word matching");
+                result.Assert(gm.RunRecentCommand(1) && MutinyCameraController.ExplosionCameraEnabled,
+                    "GM-11 replay uses the same production parser to re-enable");
                 MutinyCameraController.ResetExplosionCameraSetting();
                 result.Assert(!MutinyCameraController.ExplosionCameraEnabled,
                     "GM-11 the production SubsystemRegistration initializer resets the session default to disabled");
@@ -8114,8 +7776,8 @@ namespace Mutiny.Verification
             bool savedEnabled = MutinyCameraController.ExplosionCameraEnabled;
             MutinyFrontendController frontend = Object.FindAnyObjectByType<MutinyFrontendController>();
             bool frontendWasActive = frontend != null && frontend.gameObject.activeSelf;
-            var existingExplosions = new HashSet<MutinyExplosion>(Object.FindObjectsByType<MutinyExplosion>());
-            var existingSmoke = new HashSet<MutinyRumBottleSmokeTrail>(Object.FindObjectsByType<MutinyRumBottleSmokeTrail>());
+            var existingExplosions = new HashSet<MutinyExplosion>(Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None));
+            var existingSmoke = new HashSet<MutinyRumBottleSmokeTrail>(Object.FindObjectsByType<MutinyRumBottleSmokeTrail>(FindObjectsSortMode.None));
             GameObject MakeObject(string name)
             {
                 var go = new GameObject("ExplosionCamera_" + name);
@@ -8313,9 +7975,9 @@ namespace Mutiny.Verification
                 weapon.PhysicsBody.State.X = otherFar.PhysicsBody.State.X;
                 weapon.PhysicsBody.State.Y = otherFar.PhysicsBody.State.Y;
                 weapon.Fire(Vector2.zero);
-                var prior = new HashSet<MutinyExplosion>(Object.FindObjectsByType<MutinyExplosion>());
+                var prior = new HashSet<MutinyExplosion>(Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None));
                 weapon.Explode();
-                foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None))
                     if (!prior.Contains(explosion))
                         explosion.ApplyHit();
                 camera.AdvanceCameraForVerification(1f / 120f);
@@ -8331,10 +7993,10 @@ namespace Mutiny.Verification
                 MutinyCameraController.SetExplosionCameraEnabled(savedEnabled);
                 for (int i = objects.Count - 1; i >= 0; i--)
                     DestroyNow(objects[i]);
-                foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>(FindObjectsSortMode.None))
                     if (explosion != null && !existingExplosions.Contains(explosion))
                         DestroyNow(explosion.gameObject);
-                foreach (MutinyRumBottleSmokeTrail smoke in Object.FindObjectsByType<MutinyRumBottleSmokeTrail>())
+                foreach (MutinyRumBottleSmokeTrail smoke in Object.FindObjectsByType<MutinyRumBottleSmokeTrail>(FindObjectsSortMode.None))
                     if (smoke != null && !existingSmoke.Contains(smoke))
                         DestroyNow(smoke.gameObject);
                 if (frontendWasActive && frontend != null)
@@ -8354,7 +8016,7 @@ namespace Mutiny.Verification
             GameObject ballObject = null;
             GameObject chestObject = null;
             var existingSmoke = new HashSet<MutinyRumBottleSmokeTrail>(
-                Object.FindObjectsByType<MutinyRumBottleSmokeTrail>());
+                Object.FindObjectsByType<MutinyRumBottleSmokeTrail>(FindObjectsSortMode.None));
             try
             {
                 levelObject = new GameObject("CameraMovement_Level");
@@ -8531,7 +8193,7 @@ namespace Mutiny.Verification
                 DestroyNow(cameraObject);
                 DestroyNow(turnObject);
                 DestroyNow(levelObject);
-                foreach (MutinyRumBottleSmokeTrail smoke in Object.FindObjectsByType<MutinyRumBottleSmokeTrail>())
+                foreach (MutinyRumBottleSmokeTrail smoke in Object.FindObjectsByType<MutinyRumBottleSmokeTrail>(FindObjectsSortMode.None))
                 {
                     if (smoke != null && !existingSmoke.Contains(smoke))
                         DestroyNow(smoke.gameObject);

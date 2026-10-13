@@ -116,7 +116,7 @@ namespace Mutiny.Simulation
 
         private void ApplyCharacterContact(PhysicsBodyState ball)
         {
-            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
+            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>(FindObjectsSortMode.None);
             for (int i = 0; i < teams.Length; i++)
             {
                 List<MutinyCharacter> characters = teams[i].Characters;

@@ -102,7 +102,7 @@ namespace Mutiny.Simulation
             if (inputTeam == null || inputTeam.IsAiControlled)
                 return null;
 
-            MutinySeagull[] seagulls = Object.FindObjectsByType<MutinySeagull>();
+            MutinySeagull[] seagulls = Object.FindObjectsByType<MutinySeagull>(FindObjectsSortMode.None);
             for (int i = 0; i < seagulls.Length; i++)
             {
                 MutinySeagull seagull = seagulls[i];
@@ -284,7 +284,7 @@ namespace Mutiny.Simulation
 
         private bool IsAiOwner()
         {
-            MutinyTeam[] teams = Object.FindObjectsByType<MutinyTeam>();
+            MutinyTeam[] teams = Object.FindObjectsByType<MutinyTeam>(FindObjectsSortMode.None);
             for (int i = 0; i < teams.Length; i++)
             {
                 if (teams[i] != null && teams[i].Characters.Contains(Owner))

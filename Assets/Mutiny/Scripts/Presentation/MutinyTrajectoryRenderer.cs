@@ -45,19 +45,15 @@ namespace Mutiny.Presentation
             int gridH,
             float maxForce = 20f,
             float weightPerTick = MutinyPhysics.Gravity,
-            string weaponType = null,
-            Vector2? displayOriginPx = null)
+            string weaponType = null)
         {
-            // Keep force/prediction authoritative, while attaching the visible
-            // path to the same interpolated pose as its character or weapon.
-            Vector2 displayStart = displayOriginPx ?? startPosPx;
-            DrawPullLine(displayStart, displayStart + (dragPosPx - startPosPx), maxForce);
+            DrawPullLine(startPosPx, dragPosPx, maxForce);
 
             Vector2 launchVelocity = MutinyPhysics.CalculateTwangVelocity(startPosPx, dragPosPx, maxForce);
             // Solid.drawTwangLine predicts exactly 15 unconstrained ticks. It adds
             // weight before each point and deliberately does not test terrain.
-            var pixelPoints = new List<Vector2>(OriginalPredictionSteps + 1) { displayStart };
-            Vector2 predictionPosition = displayStart;
+            var pixelPoints = new List<Vector2>(OriginalPredictionSteps + 1) { startPosPx };
+            Vector2 predictionPosition = startPosPx;
             Vector2 predictionVelocity = launchVelocity;
             for (int i = 0; i < OriginalPredictionSteps; i++)
             {

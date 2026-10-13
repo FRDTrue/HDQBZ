@@ -19,6 +19,7 @@ namespace Mutiny.Presentation.Editor
         private const string SourcePath = "Assets/Mutiny/Localization/Mutiny.tsv";
         private const string OriginalWeaponPath = "Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/game/WeaponSelectButton.as";
         private const string OriginalScriptsPath = "Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/";
+        private const string FontPath = "Assets/Resources/抖音美好体.otf";
         private const string PlayModeKey = "Mutiny.LocalizationPlayModeVerification";
         private const string LanguagePrefKey = "mutiny_language_v1";
         private static double s_PlayModeStart;
@@ -80,8 +81,7 @@ namespace Mutiny.Presentation.Editor
             {
                 if (!MutinyLocalization.IsReady ||
                     UnityEngine.Object.FindAnyObjectByType<MutinyFrontendController>() == null ||
-                    Resources.Load<Font>(MutinyLocalizedText.CjkFontResource(MutinyLocalization.SimplifiedChinese)) == null ||
-                    Resources.Load<Font>(MutinyLocalizedText.CjkFontResource(MutinyLocalization.TraditionalChineseHongKong)) == null)
+                    Resources.Load<Font>("抖音美好体") == null)
                     throw new InvalidOperationException("Production frontend did not load localization text and font.");
                 MutinyLevel1VerificationResult result = MutinyTurnActionUiVerificationTest.RunGMLanguage(gm);
                 if (!result.Passed)
@@ -124,38 +124,47 @@ namespace Mutiny.Presentation.Editor
             var collection = LocalizationEditorSettings.GetStringTableCollection("Mutiny");
             if (collection == null)
                 throw new InvalidOperationException("Mutiny String Table Collection is missing.");
-            var translations = MutinyLocalization.ParseTranslations(File.ReadAllText(SourcePath));
-            StringTable english = null;
-            int count = translations[MutinyLocalization.English].Count;
-            foreach (string code in MutinyLocalization.SupportedCodes)
+            var englishLocale = LocalizationEditorSettings.GetLocale("en");
+            var chineseLocale = LocalizationEditorSettings.GetLocale("zh-Hans");
+            StringTable english = englishLocale == null ? null : collection.GetTable(englishLocale.Identifier) as StringTable;
+            StringTable chinese = chineseLocale == null ? null : collection.GetTable(chineseLocale.Identifier) as StringTable;
+            if (english == null || chinese == null)
+                throw new InvalidOperationException("English or Simplified Chinese table is missing.");
+
+            Font font = AssetDatabase.LoadAssetAtPath<Font>(FontPath);
+            if (font == null || !font.dynamic)
+                throw new InvalidOperationException("Bundled CJK dynamic font is missing.");
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            int count = 0;
+            foreach (string line in File.ReadAllLines(SourcePath))
             {
-                var locale = LocalizationEditorSettings.GetLocale(code);
-                StringTable table = locale == null ? null : collection.GetTable(locale.Identifier) as StringTable;
-                if (table == null) throw new InvalidOperationException("Missing localization table: " + code);
-                Font font = null;
-                if (code == MutinyLocalization.English) english = table;
-                else
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
+                    continue;
+                string[] fields = line.Split('\t');
+                if (fields.Length != 3 || !seen.Add(fields[0]))
+                    throw new InvalidOperationException("Invalid or duplicate localization key: " + line);
+
+                string en = fields[1].Replace("\\n", "\n");
+                string zh = fields[2].Replace("\\n", "\n");
+                if (string.IsNullOrWhiteSpace(en) || string.IsNullOrWhiteSpace(zh) ||
+                    english.GetEntry(fields[0])?.LocalizedValue != en ||
+                    chinese.GetEntry(fields[0])?.LocalizedValue != zh)
+                    throw new InvalidOperationException("Missing or stale translation: " + fields[0]);
+
+                string enSlots = string.Join(",", ExtractSlots(en));
+                string zhSlots = string.Join(",", ExtractSlots(zh));
+                if (enSlots != zhSlots)
+                    throw new InvalidOperationException("Placeholder mismatch: " + fields[0]);
+                foreach (char character in zh)
                 {
-                    font = AssetDatabase.LoadAssetAtPath<Font>("Assets/Mutiny/Resources/" +
-                        MutinyLocalizedText.CjkFontResource(code) + ".otf");
-                    if (font == null || !font.dynamic)
-                        throw new InvalidOperationException("Missing dynamic CJK font: " + code);
+                    if (!char.IsWhiteSpace(character) && !font.HasCharacter(character))
+                        throw new InvalidOperationException($"Missing bundled glyph U+{(int)character:X4}: {fields[0]}");
                 }
-                foreach (var entry in translations[code])
-                {
-                    if (table.GetEntry(entry.Key)?.LocalizedValue != entry.Value)
-                        throw new InvalidOperationException("Missing or stale translation: " + code + "/" + entry.Key);
-                    if (string.Join(",", ExtractSlots(translations[MutinyLocalization.English][entry.Key])) !=
-                        string.Join(",", ExtractSlots(entry.Value)))
-                        throw new InvalidOperationException("Placeholder mismatch: " + code + "/" + entry.Key);
-                    if (font == null) continue;
-                    foreach (char character in entry.Value)
-                        if (!char.IsWhiteSpace(character) && !font.HasCharacter(character))
-                            throw new InvalidOperationException($"Missing {code} glyph U+{(int)character:X4}: {entry.Key}");
-                    if (entry.Key.StartsWith("speech.", StringComparison.Ordinal) &&
-                        MutinyLocalizedText.MeasureSpeechHeight(entry.Value, 216f, code) > 98f)
-                        throw new InvalidOperationException("Dialogue overflows bubble: " + code + "/" + entry.Key);
-                }
+                if (fields[0].StartsWith("speech.", StringComparison.Ordinal) &&
+                    MutinyLocalizedText.MeasureSpeechHeight(zh, 216f) > 98f)
+                    throw new InvalidOperationException("Chinese dialogue overflows bubble: " + fields[0]);
+                count++;
             }
 
             var originalWeapons = new Dictionary<string, string[]>(StringComparer.Ordinal);
@@ -191,23 +200,6 @@ namespace Mutiny.Presentation.Editor
             }
             if (speechCount != 60)
                 throw new InvalidOperationException("Expected 60 battle speech lines from AS2.");
-            for (int index = 0; index < 4; index++)
-            {
-                string key = MutinySpeechController.LineKey("Robot", index);
-                if (!MutinySpeechController.TryResolveEnglishLine("Robot", index, out string line) ||
-                    line != translations[MutinyLocalization.English][key])
-                    throw new InvalidOperationException("CSV robot line is not available through production speech resolver: " + key);
-                string layout = MutinyLocalizedText.WrapEnglishSpeech(line, 220f);
-                string[] wrappedLines = layout.Split('\n');
-                if (layout.Length != line.Length || (wrappedLines.Length - 1) * 13f + 11f > 92f)
-                    throw new InvalidOperationException("Robot English layout exceeds bubble height or changes reveal indices: " + key);
-                foreach (string wrappedLine in wrappedLines)
-                    if (MutinyBitmapFont.MeasureDangleText(wrappedLine) > 220f)
-                        throw new InvalidOperationException("Robot English line exceeds bubble width: " + key);
-            }
-            if (MutinySpeechController.TryResolveEnglishLine("__missing_team__", 0, out _) ||
-                MutinySpeechController.TryResolveEnglishLine("Robot", 4, out _))
-                throw new InvalidOperationException("Invalid speech sequence or index was accepted.");
             int[] endingSprites = { 784, 788, 791, 793, 795 };
             for (int index = 0; index < endingSprites.Length; index++)
             {
@@ -217,7 +209,7 @@ namespace Mutiny.Presentation.Editor
                     MutinyEndingSequence.Dialogues[index].Text != action.Groups[1].Value)
                     throw new InvalidOperationException("Original ending dialogue changed: " + index);
             }
-            Debug.Log($"[Localization] Validation passed: {count} keys in {translations.Count} languages, regional font glyphs, 15 SWF weapon copies, 60 battle/5 ending originals and both Chinese bubble layouts.");
+            Debug.Log($"[Localization] Validation passed: {count} paired keys, bundled glyphs, 15 SWF weapon copies, 60 battle/5 ending originals and 65 Chinese bubble layouts.");
         }
 
         public static void RebuildAndValidate()

@@ -15,17 +15,16 @@ namespace Mutiny.Levels.Editor
                 Application.dataPath,
                 "..",
                 "Docs",
-                "11-VerificationAndDebug",
-                "04-Logging",
+                "10-OriginalEvidence",
                 "Artifacts",
-                "RuntimeLevelScan"));
+                "LevelScan"));
             try
             {
                 MutinyLevelScanResult result = MutinyLevelScanner.Scan(input, output);
                 string message = $"Level scan: {result.Parsed}/{result.Files} parsed, {result.Errors} errors; " +
                     $"tiles={result.TileTypes}, objects={result.ObjectTypes}, attributes={result.Attributes}. " +
                     $"Reports: {output}";
-                if (result.Errors > 0 || result.Files == 0)
+                if (result.Errors > 0 || result.Files != 18)
                     Debug.LogError(message);
                 else
                     Debug.Log(message);

@@ -107,11 +107,7 @@ namespace Mutiny.Levels
                 "The preliminary documentation stated 22 attributes; independent XML recount confirmed 20.\n\n");
             bool matches = result.Files == 18 && result.Parsed == 18 && result.Errors == 0 &&
                 result.TileTypes == 107 && result.ObjectTypes == 29 && result.Attributes == 20;
-            bool hasModeScopedNames = files.Any(path => MutinyLevelId.TryParse(
-                Path.GetFileNameWithoutExtension(path), out _));
-            summary.Append(hasModeScopedNames
-                ? "Reference comparison: NOT APPLICABLE — current mode-scoped resources include extensions; the original 18-file evidence baseline is unchanged.\n\n"
-                : $"Reference comparison: {(matches ? "MATCH" : "MISMATCH — inspect CSV reports")}.\n\n");
+            summary.Append($"Reference comparison: {(matches ? "MATCH" : "MISMATCH — inspect CSV reports")}.\n\n");
             summary.Append("| Report | Contents |\n| --- | --- |\n" +
                 "| levels.csv | Per-level metadata, type counts and source SHA256 |\n" +
                 "| tile-types.csv | Combined tile names and occurrence counts |\n" +

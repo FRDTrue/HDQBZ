@@ -91,7 +91,7 @@ public static class MutinyReleaseBuild
             Debug.LogError("[Mutiny Release] Cannot write build report: " + exception);
         }
 
-        Debug.Log($"[Mutiny Release] {result.platform} success={result.success}, version={result.version}, buildCode={result.buildNumber}");
+        Debug.Log($"[Mutiny Release] {result.platform} success={result.success}, version={result.version}+{result.buildNumber}");
         EditorApplication.Exit(result.success ? 0 : 1);
     }
 

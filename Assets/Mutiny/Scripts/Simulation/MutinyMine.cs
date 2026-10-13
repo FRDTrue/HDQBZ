@@ -39,7 +39,6 @@ namespace Mutiny.Simulation
         public bool IsStored => m_Stored;
         public bool IsActive => m_Active;
         public int CountdownRemaining => m_Countdown;
-        internal int IgnoreTicksRemaining => Mathf.Max(0, m_IgnoreTicks);
         public bool BlocksTurn => !m_Stored || m_Active;
         public int CurrentAnimationFrame => m_AnimationFrame + 1;
         public bool IsArmingAnimation => m_PresentationState == PresentationState.Arming;
@@ -162,7 +161,7 @@ namespace Mutiny.Simulation
             if (--m_IgnoreTicks > 0)
                 return;
 
-            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
+            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>(FindObjectsSortMode.None);
             for (int i = 0; i < teams.Length; i++)
             {
                 List<MutinyCharacter> characters = teams[i].Characters;
@@ -186,7 +185,7 @@ namespace Mutiny.Simulation
         public static bool NotifyCharacterBeganSelfThrowAim(MutinyCharacter character)
         {
             bool activated = false;
-            MutinyMine[] mines = FindObjectsByType<MutinyMine>();
+            MutinyMine[] mines = FindObjectsByType<MutinyMine>(FindObjectsSortMode.None);
             for (int i = 0; i < mines.Length; i++)
             {
                 MutinyMine mine = mines[i];
@@ -225,7 +224,7 @@ namespace Mutiny.Simulation
 
         private static bool IsCharacterSelfThrowAiming(MutinyCharacter character)
         {
-            MutinyPlayerInput[] inputs = FindObjectsByType<MutinyPlayerInput>();
+            MutinyPlayerInput[] inputs = FindObjectsByType<MutinyPlayerInput>(FindObjectsSortMode.None);
             for (int i = 0; i < inputs.Length; i++)
             {
                 if (inputs[i] != null && inputs[i].IsCharacterThrowDragInProgress(character))

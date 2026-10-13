@@ -1,186 +1,187 @@
 {
-  "name": "MutinyController",
-  "maps": [
-    {
-      "name": "Controller",
-      "id": "96461c48-3a7a-4bac-853a-97f9a637b166",
-      "actions": [
+    "version": 1,
+    "name": "MutinyController",
+    "maps": [
         {
-          "name": "Navigate",
-          "type": "Value",
-          "id": "29ce4374-3913-41e0-a53d-bc131c067c28",
-          "expectedControlType": "Vector2",
-          "processors": "",
-          "interactions": "",
-          "initialStateCheck": true
-        },
-        {
-          "name": "LeftStick",
-          "type": "Value",
-          "id": "ce073740-237e-4574-ac61-4bd38a8827ce",
-          "expectedControlType": "Vector2",
-          "processors": "",
-          "interactions": "",
-          "initialStateCheck": true
-        },
-        {
-          "name": "Pan",
-          "type": "Value",
-          "id": "cedb2cbc-1c3c-45f2-9f2a-dd5cb6891e8b",
-          "expectedControlType": "Vector2",
-          "processors": "",
-          "interactions": "",
-          "initialStateCheck": true
-        },
-        {
-          "name": "IncreasePower",
-          "type": "Value",
-          "id": "ec6ec6fb-71e8-46b5-88d1-c1d928b97d1b",
-          "expectedControlType": "Axis",
-          "processors": "",
-          "interactions": "",
-          "initialStateCheck": true
-        },
-        {
-          "name": "DecreasePower",
-          "type": "Value",
-          "id": "ad75b331-3124-4e6b-98eb-8d58c04e2f2b",
-          "expectedControlType": "Axis",
-          "processors": "",
-          "interactions": "",
-          "initialStateCheck": true
-        },
-        {
-          "name": "Confirm",
-          "type": "Button",
-          "id": "41d163a6-f084-4f4d-ae39-45f1ff275fd8",
-          "expectedControlType": "Button",
-          "processors": "",
-          "interactions": "",
-          "initialStateCheck": false
-        },
-        {
-          "name": "Back",
-          "type": "Button",
-          "id": "5846b5a5-ccab-41a0-866a-b068b1a680d6",
-          "expectedControlType": "Button",
-          "processors": "",
-          "interactions": "",
-          "initialStateCheck": false
-        },
-        {
-          "name": "Menu",
-          "type": "Button",
-          "id": "e29076ff-c062-495e-b27e-b85e7683b796",
-          "expectedControlType": "Button",
-          "processors": "",
-          "interactions": "",
-          "initialStateCheck": false
+            "name": "Controller",
+            "id": "96461c48-3a7a-4bac-853a-97f9a637b166",
+            "actions": [
+                {
+                    "name": "Navigate",
+                    "type": "Value",
+                    "id": "29ce4374-3913-41e0-a53d-bc131c067c28",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "LeftStick",
+                    "type": "Value",
+                    "id": "ce073740-237e-4574-ac61-4bd38a8827ce",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Pan",
+                    "type": "Value",
+                    "id": "cedb2cbc-1c3c-45f2-9f2a-dd5cb6891e8b",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "IncreasePower",
+                    "type": "Value",
+                    "id": "ec6ec6fb-71e8-46b5-88d1-c1d928b97d1b",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "DecreasePower",
+                    "type": "Value",
+                    "id": "ad75b331-3124-4e6b-98eb-8d58c04e2f2b",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Confirm",
+                    "type": "Button",
+                    "id": "41d163a6-f084-4f4d-ae39-45f1ff275fd8",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Back",
+                    "type": "Button",
+                    "id": "5846b5a5-ccab-41a0-866a-b068b1a680d6",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Menu",
+                    "type": "Button",
+                    "id": "e29076ff-c062-495e-b27e-b85e7683b796",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "c25959aa-10e3-420d-ad13-75b12f724402",
+                    "path": "<Gamepad>/dpad",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Navigate",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "fba2b924-9ba4-48f1-be02-13f6baef6a2c",
+                    "path": "<Gamepad>/leftStick",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "LeftStick",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "a6287972-2e87-4635-9d5e-99c62395d22d",
+                    "path": "<Gamepad>/rightStick",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Pan",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "704544fc-09f9-4108-b45f-ec500de32d4c",
+                    "path": "<Gamepad>/rightTrigger",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "IncreasePower",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "b798352f-f9c3-4c7e-970c-cda2d01df30b",
+                    "path": "<Gamepad>/leftTrigger",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "DecreasePower",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "7332a8c2-56a3-4542-9921-f24c30e8d7b6",
+                    "path": "<Gamepad>/buttonSouth",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Confirm",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "e21c5430-0f9a-436f-ac62-e6c09c859137",
+                    "path": "<Gamepad>/buttonEast",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Back",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "a3ed9b01-0687-4512-b346-e8ab31999e4a",
+                    "path": "<Gamepad>/start",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Menu",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
         }
-      ],
-      "bindings": [
+    ],
+    "controlSchemes": [
         {
-          "name": "",
-          "id": "c25959aa-10e3-420d-ad13-75b12f724402",
-          "path": "<Gamepad>/dpad",
-          "interactions": "",
-          "processors": "",
-          "groups": "Gamepad",
-          "action": "Navigate",
-          "isComposite": false,
-          "isPartOfComposite": false
-        },
-        {
-          "name": "",
-          "id": "fba2b924-9ba4-48f1-be02-13f6baef6a2c",
-          "path": "<Gamepad>/leftStick",
-          "interactions": "",
-          "processors": "",
-          "groups": "Gamepad",
-          "action": "LeftStick",
-          "isComposite": false,
-          "isPartOfComposite": false
-        },
-        {
-          "name": "",
-          "id": "a6287972-2e87-4635-9d5e-99c62395d22d",
-          "path": "<Gamepad>/rightStick",
-          "interactions": "",
-          "processors": "",
-          "groups": "Gamepad",
-          "action": "Pan",
-          "isComposite": false,
-          "isPartOfComposite": false
-        },
-        {
-          "name": "",
-          "id": "704544fc-09f9-4108-b45f-ec500de32d4c",
-          "path": "<Gamepad>/rightTrigger",
-          "interactions": "",
-          "processors": "",
-          "groups": "Gamepad",
-          "action": "IncreasePower",
-          "isComposite": false,
-          "isPartOfComposite": false
-        },
-        {
-          "name": "",
-          "id": "b798352f-f9c3-4c7e-970c-cda2d01df30b",
-          "path": "<Gamepad>/leftTrigger",
-          "interactions": "",
-          "processors": "",
-          "groups": "Gamepad",
-          "action": "DecreasePower",
-          "isComposite": false,
-          "isPartOfComposite": false
-        },
-        {
-          "name": "",
-          "id": "7332a8c2-56a3-4542-9921-f24c30e8d7b6",
-          "path": "<Gamepad>/buttonSouth",
-          "interactions": "",
-          "processors": "",
-          "groups": "Gamepad",
-          "action": "Confirm",
-          "isComposite": false,
-          "isPartOfComposite": false
-        },
-        {
-          "name": "",
-          "id": "e21c5430-0f9a-436f-ac62-e6c09c859137",
-          "path": "<Gamepad>/buttonEast",
-          "interactions": "",
-          "processors": "",
-          "groups": "Gamepad",
-          "action": "Back",
-          "isComposite": false,
-          "isPartOfComposite": false
-        },
-        {
-          "name": "",
-          "id": "a3ed9b01-0687-4512-b346-e8ab31999e4a",
-          "path": "<Gamepad>/start",
-          "interactions": "",
-          "processors": "",
-          "groups": "Gamepad",
-          "action": "Menu",
-          "isComposite": false,
-          "isPartOfComposite": false
+            "name": "Gamepad",
+            "bindingGroup": "Gamepad",
+            "devices": [
+                {
+                    "devicePath": "<Gamepad>",
+                    "isOptional": false,
+                    "isOR": false
+                }
+            ]
         }
-      ]
-    }
-  ],
-  "controlSchemes": [
-    {
-      "name": "Gamepad",
-      "bindingGroup": "Gamepad",
-      "devices": [
-        {
-          "devicePath": "<Gamepad>",
-          "isOptional": false,
-          "isOR": false
-        }
-      ]
-    }
-  ]
+    ]
 }

@@ -615,20 +615,64 @@ MonoBehaviour:
     m_Key: corner.sfx
     m_Metadata:
       m_Items: []
-  - m_Id: 1893825906728960
-    m_Key: speech.robot.0
+  - m_Id: 1439731086553088
+    m_Key: frontend.lan_play
     m_Metadata:
       m_Items: []
-  - m_Id: 1893825948672000
-    m_Key: speech.robot.1
+  - m_Id: 1439731166244864
+    m_Key: frontend.lan_host
     m_Metadata:
       m_Items: []
-  - m_Id: 1893825948672001
-    m_Key: speech.robot.2
+  - m_Id: 1439731166244865
+    m_Key: frontend.lan_join
     m_Metadata:
       m_Items: []
-  - m_Id: 1893825948672002
-    m_Key: speech.robot.3
+  - m_Id: 1439731166244866
+    m_Key: frontend.ip
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244867
+    m_Key: frontend.lan_waiting
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244868
+    m_Key: frontend.connecting
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244869
+    m_Key: frontend.lan_host_ready
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244870
+    m_Key: frontend.lan_client_ready
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244871
+    m_Key: frontend.lan_in_match
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244872
+    m_Key: frontend.disconnected
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1591801328463872
+    m_Key: frontend.quick_battle_off
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1591801408155648
+    m_Key: frontend.quick_battle_on
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4074888159326208
+    m_Key: frontend.first_player_random
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4074888327098368
+    m_Key: frontend.first_player_p1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4074888327098369
+    m_Key: frontend.first_player_p2
     m_Metadata:
       m_Items: []
   m_Metadata:

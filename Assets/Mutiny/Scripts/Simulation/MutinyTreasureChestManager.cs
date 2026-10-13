@@ -73,7 +73,7 @@ namespace Mutiny.Simulation
                 return false;
             }
 
-            int column = m_ValidDropColumns[UnityEngine.Random.Range(0, m_ValidDropColumns.Count)];
+            int column = m_ValidDropColumns[MutinyMatchRandom.NextInt(0, m_ValidDropColumns.Count)];
             int floorRow = FindFirstSolidRow(column);
             if (floorRow < 0)
             {
@@ -92,10 +92,10 @@ namespace Mutiny.Simulation
                 return false;
             }
 
-            int contentCount = 1 + UnityEngine.Random.Range(0, 3);
+            int contentCount = 1 + MutinyMatchRandom.NextInt(0, 3);
             var contents = new List<string>(contentCount);
             for (int i = 0; i < contentCount; i++)
-                contents.Add(m_PotentialWeapons[UnityEngine.Random.Range(0, m_PotentialWeapons.Count)]);
+                contents.Add(m_PotentialWeapons[MutinyMatchRandom.NextInt(0, m_PotentialWeapons.Count)]);
 
             GameObject chestObject = new GameObject($"TreasureChest_{m_Chests.Count:D2}");
             chestObject.transform.SetParent(m_LevelRoot.ObjectsHolder, false);

@@ -8,9 +8,6 @@ namespace Mutiny.Levels
         public int Height;
         public int Players;
         public string Name;
-        public float GravityScale = 1f;
-        public string VisualTheme = string.Empty;
-        public int SpaceThemeMinX;
 
         // [y, x]，保持原版 XML 坐标：x 从左到右，y 从上到下。
         // 保留非空 tile 的原始名称；XML 空格标记 "-" 解析为 null。
@@ -19,15 +16,6 @@ namespace Mutiny.Levels
         public string[,] Background;
 
         public List<MutinyLevelObject> Objects = new();
-        public List<MutinySpeechAudio> SpeechAudio = new();
-    }
-
-    [System.Serializable]
-    public sealed class MutinySpeechAudio
-    {
-        public int Line;
-        public string[] Clips;
-        public float GapSeconds = .5f;
     }
 
     public sealed class MutinyLevelObject

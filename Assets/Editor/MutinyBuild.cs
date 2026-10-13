@@ -146,7 +146,7 @@ public static class MutinyBuild
         SessionState.SetString(QueueKey, JsonUtility.ToJson(state));
         SessionState.SetBool(QueueActiveKey, true);
 
-        Debug.Log($"[Mutiny Build] Starting build version={version}, buildCode={buildNumber}: {string.Join(", ", targets.Select(t => t.ToString()))}");
+        Debug.Log($"[Mutiny Build] Starting build {version}+{buildNumber}: {string.Join(", ", targets.Select(t => t.ToString()))}");
         ContinueQueue();
     }
 
@@ -258,7 +258,7 @@ public static class MutinyBuild
         SessionState.SetBool(QueueActiveKey, false);
 
         if (state != null)
-            Debug.Log($"[Mutiny Build] Build queue finished: version={state.version}, buildCode={state.buildNumber}. Output: {Path.GetFullPath("Builds")}");
+            Debug.Log($"[Mutiny Build] Build queue finished: {state.version}+{state.buildNumber}. Output: {Path.GetFullPath("Builds")}");
         else
             Debug.Log("[Mutiny Build] Build queue finished.");
     }
@@ -397,7 +397,7 @@ public static class MutinyBuild
 
         string expectedInstaller = Path.Combine(
             outputDirectory,
-            $"MutinyX-Setup-{SanitizeVersionForFileName(version)}.exe"
+            $"MutinyX-Setup-{SanitizeVersionForFileName(version)}+{buildNumber}.exe"
         );
 
         if (!File.Exists(expectedInstaller))
@@ -476,7 +476,7 @@ public static class MutinyBuild
     private static string GetOutputPath(BuildTarget target, string version, int buildNumber)
     {
         string safeVersion = SanitizeVersionForFileName(version);
-        string label = $"MutinyX-{safeVersion}";
+        string label = $"MutinyX-{safeVersion}+{buildNumber}";
 
         switch (target)
         {

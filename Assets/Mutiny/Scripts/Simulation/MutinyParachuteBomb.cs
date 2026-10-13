@@ -44,7 +44,6 @@ namespace Mutiny.Simulation
         private Vector2 m_MobileFanScreenPosition;
         private bool m_ControllerFanMustRelease;
 
-        [Header("Parachute State")]
         public bool ChuteOpen { get; private set; }
         public bool IsFanActive { get; private set; }
         public bool ControllerFanCanStart => !m_ControllerFanMustRelease;
@@ -221,15 +220,6 @@ namespace Mutiny.Simulation
 
         private void ApplyFanInput()
         {
-            if (AiActionPlan != null)
-            {
-                int direction = AiActionPlan.FanDirection;
-                IsFanActive = direction != 0;
-                PhysicsBody.State.VelocityX += direction * FanImpulsePerTick;
-                if (IsFanActive && m_FramesFromFire % FanSoundIntervalTicks == 0)
-                    MutinyAudioManager.Instance?.PlaySFX("fan");
-                return;
-            }
             if (!IsHumanOwned() || !TryGetFanInput(out bool held, out float mousePixelX))
             {
                 IsFanActive = false;
@@ -253,6 +243,15 @@ namespace Mutiny.Simulation
 
         private bool TryGetFanInput(out bool held, out float mousePixelX)
         {
+            // Fan steering is continuous per-tick input; online lockstep only
+            // syncs discrete commands, so online matches drop with no fan.
+            if (Mutiny.Network.MutinyNetworkManager.IsOnlineMatch)
+            {
+                held = false;
+                mousePixelX = 0f;
+                return false;
+            }
+
             if (m_VerificationFanHeld.HasValue)
             {
                 held = m_VerificationFanHeld.Value;
@@ -458,7 +457,7 @@ namespace Mutiny.Simulation
             if (inputTeam == null || inputTeam.IsAiControlled)
                 return null;
 
-            MutinyParachuteBomb[] bombs = Object.FindObjectsByType<MutinyParachuteBomb>();
+            MutinyParachuteBomb[] bombs = Object.FindObjectsByType<MutinyParachuteBomb>(FindObjectsSortMode.None);
             for (int i = 0; i < bombs.Length; i++)
             {
                 MutinyParachuteBomb bomb = bombs[i];
@@ -553,7 +552,7 @@ namespace Mutiny.Simulation
 
         private bool IsHumanOwned()
         {
-            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
+            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>(FindObjectsSortMode.None);
             for (int i = 0; i < teams.Length; i++)
             {
                 if (teams[i] != null && teams[i].Characters.Contains(Owner))

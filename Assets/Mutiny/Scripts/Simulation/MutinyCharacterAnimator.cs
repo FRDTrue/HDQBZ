@@ -170,8 +170,6 @@ namespace Mutiny.Simulation
         public static readonly Dictionary<string, Vector2> CharacterPivots =
             new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase)
         {
-            { "RobotCaptain", new Vector2(16f / 32f, 15f / 36f) },         // Generated robot sheet registration, matching the existing feet baseline.
-            { "Robot", new Vector2(16f / 32f, 15f / 36f) },
             { "redPirate", new Vector2(12f / 28f, 15f / 30f) },              // (0.4286, 0.5000)
             { "bluePirate", new Vector2(12f / 28f, 15f / 30f) },             // (0.4286, 0.5000)
             { "cabinBoy", new Vector2(12f / 28f, 15f / 30f) },               // (0.4286, 0.5000)

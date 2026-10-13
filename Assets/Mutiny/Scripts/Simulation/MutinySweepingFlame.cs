@@ -130,7 +130,7 @@ namespace Mutiny.Simulation
 
         private static void ApplyOriginalSpawnHit(Vector2 flamePosition)
         {
-            MutinyCharacter[] characters = FindObjectsByType<MutinyCharacter>();
+            MutinyCharacter[] characters = FindObjectsByType<MutinyCharacter>(FindObjectsSortMode.None);
             for (int i = 0; i < characters.Length; i++)
             {
                 MutinyCharacter character = characters[i];
@@ -143,8 +143,8 @@ namespace Mutiny.Simulation
                 if (dx * dx + dy * dy >= CharacterHitDistanceSquared)
                     continue;
 
-                state.VelocityX = Random.value * 8f - 4f;
-                state.VelocityY = -(Random.value * 2f + 6f);
+                state.VelocityX = MutinyMatchRandom.NextValue() * 8f - 4f;
+                state.VelocityY = -(MutinyMatchRandom.NextValue() * 2f + 6f);
                 character.PhysicsBody.State = state;
                 character.TakeDamage(Damage);
                 MutinyDebugLog.Info("RumBottle",

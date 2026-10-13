@@ -34,7 +34,8 @@ namespace Mutiny.Verification
 
             for (int lvl = 1; lvl <= 18; lvl++)
             {
-                string fileName = MutinyLevelId.FromOriginalNumber(lvl).AssetName + ".xml";
+                string padded = lvl.ToString("D2");
+                string fileName = $"level_{padded}.xml";
                 string fullPath = Path.Combine(levelsDir, fileName);
 
                 var record = new LevelRegressionRecord
@@ -147,3 +148,4 @@ namespace Mutiny.Verification
         }
     }
 }
+

@@ -1,3 +1,0 @@
-PASS 70 frames: dimensions, binary alpha, palette <=16, margins, foot baseline; 13/14 blank.
-PASS EXT-ROBOT-ART-02: gold Captain, silver Robot on every visible frame.
-PASS head dark fraction: Captain=0.532951289398281, Robot=0.427007299270073.

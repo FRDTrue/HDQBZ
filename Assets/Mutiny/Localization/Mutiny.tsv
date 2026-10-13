@@ -1,157 +1,171 @@
-# key	en	zh-Hans	zh-HK
-frontend.play	play	开始游戏	開始遊戲
-frontend.scores	scores	成绩	排行榜
-frontend.help	help	帮助	遊戲說明
-frontend.credits	credits	制作人员	製作人員
-frontend.back	back	返回	返回
-frontend.select_game	select game	选择模式	選擇模式
-frontend.select_level	select level	选择关卡	選擇關卡
-frontend.one_player	1 player	单人游戏	單人模式
-frontend.two_players	2 players	双人游戏	雙人模式
-frontend.game_select_hint	click one of the buttons below.||play against the computer or|against a friend!	选择下方按钮：\n与电脑对战，或与朋友对战！	點擊下方按鈕：\n與電腦對戰，或與好友對戰！
-frontend.help_fire	use your weapons to fire at your opponents|click and drag and then let go to throw them	使用武器攻击对手。\n按住并拖动，松开后投掷。	使用武器攻擊對手。\n按住並拖曳，鬆開即可投擲。
-frontend.help_move	click on a character and throw him to move him	选中角色并投掷，让他移动。	選取角色並投擲，以移動角色。
-frontend.scores_empty	no completed records yet| |defeat all 15 campaign levels|to record your high score!	还没有通关记录。\n完成全部十五关，留下你的最高分！	尚無通關紀錄。\n完成全部十五關，留下你的最高分！
-frontend.points	{0} pts	{0} 分	{0} 分
-frontend.versus	vs	对战	VS
-frontend.level_unavailable	level {0:D2} data unavailable	第 {0:D2} 关数据不可用	第 {0:D2} 關資料不可用
-frontend.level_load_failed	level {0:D2} failed to load	第 {0:D2} 关加载失败	第 {0:D2} 關載入失敗
-frontend.credit_game_by	game by nitrome	Nitrome 原作	Nitrome 原作
-frontend.credit_ported	Ported to Unity by Richard Xue	Richard Xue 移植至 Unity	Richard Xue 移植至 Unity
-frontend.credit_programming	programming	程序	程式
-frontend.credit_artwork	artwork	美术	美術
-frontend.credit_music	music	音乐	音樂
-ending.congratulations	congratulations	恭喜通关	恭喜通關
-ending.final_score	final score	最终得分	最終得分
-ending.back_title	back to title	返回标题	返回標題
-hud.quit_level	quit level	退出关卡	離開關卡
-hud.continue	continue	继续	繼續
-hud.back_menu	back to menu	返回菜单	返回選單
-hud.restart_level	restart level	重开关卡	重新開始
-hud.next_level	next level	下一关	下一關
-hud.submit_score	submit score	提交成绩	提交成績
-hud.level_complete	level complete	关卡完成	關卡完成
-hud.level_failed	level failed	挑战失败	挑戰失敗
-hud.game_complete	game complete	游戏通关	遊戲通關
-hud.draw	draw	平局	平手
-hud.player1_wins	player 1 wins	玩家 1 获胜	玩家 1 獲勝
-hud.player2_wins	player 2 wins	玩家 2 获胜	玩家 2 獲勝
-hud.level_score	level score	本关得分	本關得分
-hud.total_score	total score	总分	總分
-hud.final_score	final score	最终得分	最終得分
-hud.weapons	weapons	武器	武器
-hud.throw_character	throw character	投掷角色	投擲角色
-hud.end_go	end go	结束回合	結束回合
-hud.close	close	关闭	關閉
-hud.default_weapon_desc	Click one of the options above\nto select it.	请选择上方的武器或操作。	請選擇上方的武器或操作。
-hud.throw_desc	Click your character and drag\nwith the mouse to aim and set\nthe power.\nyou get to use this once per\nturn before you use a weapon.	按住角色并拖动，调整方向和力度。\n每回合使用武器前可以投掷一次角色。	按住角色並拖曳以調整方向和力度。\n每回合使用武器前可投擲角色一次以作移動。
-hud.end_go_desc	click here if you want to finish\nyour turn without using a\nweapon.	不使用武器，直接结束本回合。	點擊此處可在不使用武器的情況下直接結束本回合。
-hud.close_desc	click here to cancel and select\nanother player.	取消当前选择，改选其他角色。	點擊此處取消當前選擇，以選取其他角色。
-event.turn_computer	Computer, take your turn	电脑回合	電腦回合
-event.turn_player	Player {0}, take your turn	玩家 {0} 回合	玩家 {0} 回合
-event.collected_weapon	collected {0}	获得{0}	獲得 {0}
-event.loading	loading	加载中	載入中
-weapon.cherryBomb.name	cherry bomb	樱桃炸弹	櫻桃炸彈
-weapon.cherryBomb.desc	Basic weak weapon which\nexplodes on impact.\nClick the cherry bomb and drag\nwith your mouse to aim and set\nthe power.	最基础的小炸弹，碰到东西就炸。\n拖动调整方向和力度，然后祈祷炸的是别人。	最基礎的小炸彈，碰到東西就炸。\n拖曳調整方向與力度，然後祈禱炸中的是別人。
-weapon.dynamite.name	dynamite	炸药	炸藥
-weapon.dynamite.desc	This weapon explodes when it\ncomes to rest.\nClick the dynamite and drag\nwith your mouse to aim and set\nthe power.	停稳以后就会爆炸。\n拖动调整方向和力度，扔完最好离远点。	停穩之後就會爆炸。\n拖曳調整方向與力度，扔完最好離遠一點。
-weapon.boulder.name	boulder	巨石	巨石
-weapon.boulder.desc	Large boulder which can bash\nother players out of the way.\nClick the boulder and drag\nwith your mouse to aim and set\nthe power.	一块很大的石头，专治挡路的人。\n拖动调整方向和力度，把他们请出甲板。	一塊巨大的石頭，專治擋路的人。\n拖曳調整方向與力度，把他們請出甲板。
-weapon.piecesOfEight.name	pieces of eight	八枚银元	八枚銀元
-weapon.piecesOfEight.desc	Eight coins which inflict a small\namount of damage. You get\neight turns with this weapon.\nClick each one and drag to aim\nand set the power.	一把八枚银元，每枚都能造成少量伤害。\n钱是身外之物，尽管往别人脸上扔。	一把八枚銀幣，每枚都能造成微量傷害。\n錢財乃身外之物，儘管往別人臉上砸吧。
-weapon.rumBottle.name	rum bottle	朗姆酒瓶	冧酒瓶
-weapon.rumBottle.desc	This weapon explodes on impact\nand sets the nearby area on fire.\nClick it and drag\nwith your mouse to aim and set\nthe power.	撞击后爆炸，并点燃附近区域。\n暴殄天物，但效果不错。	撞擊後爆炸，並點燃附近區域。\n暴殄天物，但效果拔群。
-weapon.banana.name	banana	香蕉	香蕉
-weapon.banana.desc	This weapon is very bouncy.\nClick and drag with the mouse\nto aim and set the power.\nThen click your mouse again to\nmake it explode.	弹性离谱的一根香蕉。\n拖动投出，再点一下引爆。别问香蕉为什么会炸。	彈性離譜的一隻香蕉。\n拖曳投出，再點擊一下引爆。別問香蕉為什麼會爆炸。
-weapon.parachuteBomb.name	parachute bomb	降落伞炸弹	降落傘炸彈
-weapon.parachuteBomb.desc	Click and drag with the mouse\nto aim and set the power.\nAs it drifts down use\nyour cursor as a fan to push it\nleft or right.	拖动瞄准并投出，它会慢慢飘落。\n移动光标给它扇风，往左还是往右全靠你。	拖曳瞄準並投出，它會緩緩飄落。\n移動游標給它搧風，往左還是往右全憑你的手勢。
-weapon.woodenCrate.name	crates	木箱	木箱
-weapon.woodenCrate.desc	Click anywhere on the stage to\nplace down three crates.\nuse these to form a wall to\nprotect your characters.	点击场景放下三个木箱。\n拿来筑墙挡炮火，顺便假装这一切早有计划。	點擊場景放下三個木箱。\n用來築牆抵擋炮火，順便假裝這一切早有計畫。
-weapon.gunpowderBarrel.name	gunpowder barrels	火药桶	火藥桶
-weapon.gunpowderBarrel.desc	Click anywhere on the stage to\nplace down two barrels.\nthese will explode when hit by\na weapon.	点击场景放下两个火药桶，挨打就炸。\n安全性方面，我们没有做过测试。	點擊場景放下兩個火药桶，挨打就炸。\n安全性方面，我們從未進行過測試。
-weapon.seagull.name	seagull	海鸥	海鷗
-weapon.seagull.desc	Click on the screen to choose a\npath for the seagull to fly.\nThen click repeatedly to poop\non the enemy!	点击屏幕规划海鸥的飞行路线。\n然后连续点击，让它往敌人头上拉屎！	點擊螢幕規劃海鷗的飛行路線。\n然後連續點擊，讓它往敵人頭頂拉屎！
-weapon.mine.name	mine	地雷	地雷
-weapon.mine.desc	Click the mine and drag\nwith the mouse to aim and\nset the power.\nIt will detonate when\nanother player moves nearby.	拖动地雷调整方向和力度。\n有人靠近就会爆炸。从技术上说，这叫“惊喜”。	按住並拖曳以調整方向與力度。\n只要有倒楣蛋靠近就會起爆——給他們備一份大大的「驚喜」。
-weapon.cannon.name	cannon	大炮	大炮
-weapon.cannon.desc	Drag the cannon into position\nwithin the circle.\nclick and drag the pin at the\nback to turn the cannon.\nrelease it to fire!	把大炮拖进圆圈，拉动炮尾调整角度。\n松手开炮。海盗工程学，到这里就算毕业了。	將大炮拖入圓圈內，拉動炮尾調整角度。\n鬆手開炮。海盜工程學，到此就算畢業了。
-weapon.anchor.name	anchor	船锚	船錨
-weapon.anchor.desc	Click anywhere in the stage to\ndrop a huge anchor down\nonto enemies!	点击场景，从天上砸下一只巨大船锚。\n为什么船锚在天上？别管。	點擊場景，從天上砸下一隻巨大船錨壓扁敵人！\n為什麼船錨在天上？別管。
-weapon.voodooDoll.name	voodoo doll	巫毒娃娃	巫毒娃娃
-weapon.voodooDoll.desc	choose an enemy player by\nclicking on them. then click\nand drag to throw the doll and\nwatch the enemy helplessly\nfly off in the same direction!	先选一个倒霉蛋，再把娃娃扔出去。\n娃娃往哪飞，他就往哪飞。科学暂时无法解释。	先點擊選中一個倒楣蛋，再將娃娃扔出去。\n娃娃往哪裡飛，他就身不由己往哪裡飛！科學暫時無法解釋。
-weapon.tidalWave.name	tidal wave	巨浪	巨浪
-weapon.tidalWave.desc	click to send a huge tidal wave\nacross the bottom of the stage.\nIt will affect all players it\nhits.	点击召来巨浪横扫场地底部。\n路上的人一视同仁。	點擊召來巨浪橫掃場地底部。\n路過的人一律一視同仁。
+# key	English source	Simplified Chinese
+frontend.play	play	开始游戏
+frontend.scores	scores	成绩
+frontend.help	help	帮助
+frontend.credits	credits	制作人员
+frontend.back	back	返回
+frontend.select_game	select game	选择模式
+frontend.select_level	select level	选择关卡
+frontend.one_player	1 player	单人游戏
+frontend.two_players	2 players	双人游戏
+frontend.game_select_hint	click one of the buttons below.||play against the computer or|against a friend!	选择下方按钮：\n与电脑对战，或与朋友对战！
+frontend.help_fire	use your weapons to fire at your opponents|click and drag and then let go to throw them	使用武器攻击对手。\n按住并拖动，松开后投掷。
+frontend.help_move	click on a character and throw him to move him	选中角色并投掷，让他移动。
+frontend.scores_empty	no completed records yet| |defeat all 15 campaign levels|to record your high score!	还没有通关记录。\n完成全部十五关，留下你的最高分！
+frontend.points	{0} pts	{0} 分
+frontend.versus	vs	对战
+frontend.level_unavailable	level {0:D2} data unavailable	第 {0:D2} 关数据不可用
+frontend.level_load_failed	level {0:D2} failed to load	第 {0:D2} 关加载失败
+frontend.credit_game_by	game by nitrome	Nitrome 原作
+frontend.credit_ported	Ported to Unity by Richard Xue	Richard Xue 移植至 Unity
+frontend.credit_programming	programming	程序
+frontend.credit_artwork	artwork	美术
+frontend.credit_music	music	音乐
+ending.congratulations	congratulations	恭喜通关
+ending.final_score	final score	最终得分
+ending.back_title	back to title	返回标题
+hud.quit_level	quit level	退出关卡
+hud.continue	continue	继续
+hud.back_menu	back to menu	返回菜单
+hud.restart_level	restart level	重开关卡
+hud.next_level	next level	下一关
+hud.submit_score	submit score	提交成绩
+hud.level_complete	level complete	关卡完成
+hud.level_failed	level failed	挑战失败
+hud.game_complete	game complete	游戏通关
+hud.draw	draw	平局
+hud.player1_wins	player 1 wins	玩家 1 获胜
+hud.player2_wins	player 2 wins	玩家 2 获胜
+hud.level_score	level score	本关得分
+hud.total_score	total score	总分
+hud.final_score	final score	最终得分
+hud.weapons	weapons	武器
+hud.throw_character	throw character	投掷角色
+hud.end_go	end go	结束回合
+hud.close	close	关闭
+hud.default_weapon_desc	Click one of the options above\nto select it.	请选择上方的武器或操作。
+hud.throw_desc	Click your character and drag\nwith the mouse to aim and set\nthe power.\nyou get to use this once per\nturn before you use a weapon.	按住角色并拖动，调整方向和力度。\n每回合使用武器前可以投掷一次角色。
+hud.end_go_desc	click here if you want to finish\nyour turn without using a\nweapon.	不使用武器，直接结束本回合。
+hud.close_desc	click here to cancel and select\nanother player.	取消当前选择，改选其他角色。
+event.turn_computer	Computer, take your turn	电脑回合
+event.turn_player	Player {0}, take your turn	玩家 {0}，轮到你了
+event.collected_weapon	collected {0}	获得{0}
+event.loading	loading	加载中
+weapon.cherryBomb.name	cherry bomb	樱桃炸弹
+weapon.cherryBomb.desc	Basic weak weapon which\nexplodes on impact.\nClick the cherry bomb and drag\nwith your mouse to aim and set\nthe power.	基础武器，碰撞后爆炸。\n按住炸弹并拖动，调整方向和力度。
+weapon.dynamite.name	dynamite	炸药
+weapon.dynamite.desc	This weapon explodes when it\ncomes to rest.\nClick the dynamite and drag\nwith your mouse to aim and set\nthe power.	停止移动后爆炸。\n按住并拖动，调整方向和力度。
+weapon.boulder.name	boulder	巨石
+weapon.boulder.desc	Large boulder which can bash\nother players out of the way.\nClick the boulder and drag\nwith your mouse to aim and set\nthe power.	巨石能撞开其他角色。\n按住并拖动，调整方向和力度。
+weapon.piecesOfEight.name	pieces of eight	八枚金币
+weapon.piecesOfEight.desc	Eight coins which inflict a small\namount of damage. You get\neight turns with this weapon.\nClick each one and drag to aim\nand set the power.	连续投出八枚金币，每枚造成少量伤害。\n逐枚拖动，调整方向和力度。
+weapon.rumBottle.name	rum bottle	朗姆酒瓶
+weapon.rumBottle.desc	This weapon explodes on impact\nand sets the nearby area on fire.\nClick it and drag\nwith your mouse to aim and set\nthe power.	碰撞后爆炸，并点燃周围区域。\n按住并拖动，调整方向和力度。
+weapon.banana.name	banana	香蕉
+weapon.banana.desc	This weapon is very bouncy.\nClick and drag with the mouse\nto aim and set the power.\nThen click your mouse again to\nmake it explode.	弹性十足。拖动瞄准并投出，\n再次点击即可引爆。
+weapon.parachuteBomb.name	parachute bomb	降落伞炸弹
+weapon.parachuteBomb.desc	Click and drag with the mouse\nto aim and set the power.\nAs it drifts down use\nyour cursor as a fan to push it\nleft or right.	拖动瞄准并投出。下落时移动光标，\n像扇子一样推它向左或向右。
+weapon.woodenCrate.name	crates	木箱
+weapon.woodenCrate.desc	Click anywhere on the stage to\nplace down three crates.\nuse these to form a wall to\nprotect your characters.	在场景中点击，放下三个木箱。\n用它们筑墙保护角色。
+weapon.gunpowderBarrel.name	gunpowder barrels	火药桶
+weapon.gunpowderBarrel.desc	Click anywhere on the stage to\nplace down two barrels.\nthese will explode when hit by\na weapon.	在场景中点击，放下两个火药桶。\n受到武器攻击时会爆炸。
+weapon.seagull.name	seagull	海鸥
+weapon.seagull.desc	Click on the screen to choose a\npath for the seagull to fly.\nThen click repeatedly to poop\non the enemy!	点击屏幕决定海鸥的飞行路线，\n再连续点击，让它攻击敌人！
+weapon.mine.name	mine	地雷
+weapon.mine.desc	Click the mine and drag\nwith the mouse to aim and\nset the power.\nIt will detonate when\nanother player moves nearby.	拖动地雷调整投掷方向和力度。\n其他角色靠近时会引爆。
+weapon.cannon.name	cannon	大炮
+weapon.cannon.desc	Drag the cannon into position\nwithin the circle.\nclick and drag the pin at the\nback to turn the cannon.\nrelease it to fire!	把大炮拖进圆形范围。\n拖动炮尾调整角度，松开后开火！
+weapon.anchor.name	anchor	船锚
+weapon.anchor.desc	Click anywhere in the stage to\ndrop a huge anchor down\nonto enemies!	点击场景，让巨大的船锚砸向敌人！
+weapon.voodooDoll.name	voodoo doll	巫毒娃娃
+weapon.voodooDoll.desc	choose an enemy player by\nclicking on them. then click\nand drag to throw the doll and\nwatch the enemy helplessly\nfly off in the same direction!	先点击选定敌人，再拖动投出娃娃。\n敌人会朝同一方向飞出去！
+weapon.tidalWave.name	tidal wave	海啸
+weapon.tidalWave.desc	click to send a huge tidal wave\nacross the bottom of the stage.\nIt will affect all players it\nhits.	点击后，巨浪席卷场景底部，\n波及途经的所有角色。
+
 # Battle dialogue: AS2 Team.as::lines; indices 0/1 intro, 2/3 victory; Chinese is an authorized adaptation.
-speech.squid.0	Arrrgh what sort o' sea|beastie be this?	好家伙，这又是哪锅里跑出来的海鲜？	好傢伙，呢條又係邊度游出嚟嘅海鮮？
-speech.squid.1	Splund splund... I'm gonna|ink you up... splund splund.	噗噜噗噜……等着，我给你们都上点墨！	噗嚕噗嚕……等陣，我噴你哋一身墨！
-speech.squid.2	Yearggh take that you|varmint, we be eating squid|rings tonight.	搞定！伙计们，今晚加餐——炸鱿鱼圈！	搞掂！伙計們，今晚加餐食炸魷魚圈！
-speech.squid.3	Splund splund... I'm so|happy I've just inked|myself... splund.	噗噜噗噜……太高兴了，一不留神喷了自己一身。	噗嚕噗嚕……太興奮，一唔小心噴到自己成身都係……
-speech.crab.0	Looks like we've got a|bad case of the crabs|here, mateys!	伙计们，咱们好像染上“螃蟹”了，而且还挺严重。	伙計們，睇嚟我哋惹上一身甩唔甩嘅「毛蟹」，麻煩大喇！
-speech.crab.1	Prepare to lose your|beards... snip snip!	胡子伸过来——咔嚓，咔嚓！	胡鬚伸過嚟受死啦……咔嚓，咔嚓！
-speech.crab.2	I think we shell-shocked|them, mateys!	瞧见没？这回真把他们吓得连壳都震了。	睇見未？呢鋪真係打到佢哋「連個殼都震碎」兼發呆！
-speech.crab.3	Looks like they fell for|our deadly pincer|manoeuvre... at last their|beards be ours.	都说了这是钳形攻势。现在，胡子归我们了。	中計喇掛？呢招叫致命「鉗形攻勢」……你哋啲鬍鬚歸我哋剪喇。
-speech.shark.0	Ahoy. I think there be|something fishy here.	伙计们，我觉得这里有点不对劲……而且一股鱼腥味。	喂伙計，我聞到一陣魚腥味……呢度似有古怪喎。
-speech.shark.1	We're gonna hammer you!|You're Shark Bait!	看我一锤子送你们去当鱼饵！	等我錘爆你哋！乖乖地去做魚餌啦！
-speech.shark.2	Ya Har! 'Twas too easy!|But thar be plenty more|fish in the sea!	轻松！不过没事，大海里鱼多着呢。	哈！咁唔禁打！不過海入面嘅雜魚大把，慢慢執！
-speech.shark.3	Stop! ...Hammer-time!	停！现在是——锤子时间！	咪郁！——食我大錘！
-speech.parrot.0	Arrrgh!... Who be a pretty|boy then? ...Does Polly|want a cracker?	哎哟，谁是漂亮小宝贝呀？波莉，要不要饼干？	哎呀，邊個係靚仔BB呀？波莉想唔想食餅乾？
-speech.parrot.1	Squawk!... Who's a pretty|boy then? ...Squawk!...|Polly want a cracker!|...Squawk!	嘎！谁是漂亮小宝贝？嘎！波莉要饼干！嘎！	嘎！邊個係靚仔？嘎！波莉要食餅！嘎！
-speech.parrot.2	Arrrgh... 'tiz a shame.|They could have made fine|shoulder enhancers.	可惜了，本来还能拿来当个不错的肩饰。	真係可惜。本來擺喺膊頭做個墊肩都幾型。
-speech.parrot.3	Squawk!... Polly want a|cracker!	嘎！波莉要饼干！	嘎！波莉要食餅乾！
-speech.monkey.0	Guard the fruit mateys...|If the monkeys get it we'll|be up for another bout|of scurvy!	守住水果！让猴子抢走，咱们又得集体得坏血病！	睇實啲生果！畀班馬騮搶走，我哋又要集體生壞血病喇！
-speech.monkey.1	Oooh Oooh Ahh Ahh Bananas!	呜呜！啊啊！香蕉！	噢噢！啊啊！香蕉！
-speech.monkey.2	Yarrgh! Yer monkey business|ain't foolin' any of us!	少跟我们耍猴戏，这套骗不了海盗！	走開啦！喺海盜面前耍猴戲，呃鬼食豆腐咩！
-speech.monkey.3	Oooh Oooh Ahh Ahh More|Bananas!	呜呜！啊啊！更多香蕉！	噢噢！啊啊！仲要香蕉！
-speech.soldier.0	These boys look too clean|to be in a real fight! And|look... they've still got|teeth to knock out!	瞧这帮家伙，衣服这么干净，一看就没打过仗。牙还齐着呢！	班少爺兵成身乾乾淨淨，睇樣就知未打過仗。牙都未甩過一隻，唔敲甩幾隻點得！
-speech.soldier.1	We fight for King and|Country! ...and because we|get a decent benefits|package and pension plan!	我们为国王、为祖国而战！还有……福利不错，退休金也挺体面。	我哋為國王同國家而戰！……同埋，呢度福利同退休金確實好體面。
-speech.soldier.2	They don't look so smart|now lads... I think We'll|be using his toupee to swab|the decks!	现在可没那么体面了。伙计们，把他的假发拿去擦甲板。	而家威唔起啦。伙計們，掹佢頂假髮去省甲板！
-speech.soldier.3	You pirates will get what|you deserve... a short drop|and a sudden stop!	海盗就该有海盗的下场——绳子一套，往下一掉，然后突然停住。	海盜得一種下場——繩套一勒、兩腳懸空，行刑台見！
-speech.blindPirate.0	Yargh... These guys have|one too many eye patches!|This should be easy! Let's|get 'em!	他们是不是多戴了一只眼罩？这还不好打？上！	對面條友係咪戴多咗個眼罩？盲嘅都出嚟打，食硬佢！上！
-speech.blindPirate.1	Get who? Where am I...|how did I get here?	打谁？这是哪儿？我怎么来的？	打邊個？呢度係邊？……我點嚟嘅？
-speech.blindPirate.2	Yarrgh!|They didn't see us coming!	哈哈！他们根本没看见咱们杀过来！	哈哈！班盲毛根本睇唔到我哋殺緊過嚟！
-speech.blindPirate.3	Gar... I can't hear them...|Does anyone know if we|won?	怎么突然这么安静？谁能告诉我……我们赢了吗？	點解咁安靜？有冇人知……我哋贏咗未？
-speech.femalePirate.0	Garrrgh... Looks like we've|found ourselves some|mighty fine booty here,|mateys!	伙计们，瞧瞧！这回可碰上一群“好货色”了。	伙計們，睇下！今鋪真係撞到成色絕佳嘅「尤物」！
-speech.femalePirate.1	Yarp... The only booty you|will be getting is on the|end of my foot!	想要好货？我靴子底下倒有一份！	想打姑奶奶主意？你唯一分到嘅，就係老娘踢埋嚟嘅鞋底！
-speech.femalePirate.2	Arrgh... shame... what a|waste of such lovely|sea legs!	可惜了，这么漂亮的水手腿。	可惜，咁靚一對水手腿就咁玩完。
-speech.femalePirate.3	Yarp... Everybody knows|girls are better than boys!	这还用说？姑娘就是比小伙子强。	仲使講？全世界都知女仔打交叻過男仔！
-speech.oldPirate.0	Arrrrggggh... I think we|found some old sea dogs!|Ready for retirement!	一群老海狗！伙计们，送他们退休去。	一群老海狗！送佢哋去安老院退休啦。
-speech.oldPirate.1	We're not Old, we're|experienced... and now we're|gonna kick your... erm...|erm... what was I saying|again... who are you?	什么老？这叫有经验！现在我要踢你们的……呃……你谁？	咩老？呢啲叫經驗！睇我踢爆你哋……呃……頭先我講到邊……你邊位？
-speech.oldPirate.2	Garrrrgh! Ok, Grandads...|time for your afternoon|nap!	好了，老爷子们。午睡时间到。	得啦老人家，夠鐘返去恰個晏覺啦。
-speech.oldPirate.3	That'll show you... in my|day we used to fight a|Kraken with nothin' but a|couple o' stones. Arrrgh...|Those be the days...	服了吧！想当年，两块石头就敢打海怪……唉，那时候的人可不像现在。	服未？想當年我哋兩粒石仔就敢打海怪……唉，當年真係風光……
-speech.rainbowBeard.0	This guy be looking a little|too jolly to be flying the|ol' jolly roger, eh mateys?	伙计们，这家伙是不是太喜庆了点？挂着骷髅旗还穿成这样？	伙計，呢條友係咪誇張咗啲？掛住骷髏旗著到成隻孔雀咁？
-speech.rainbowBeard.1	Ohhhh look at you... don't|you look tough? Anyway,|haven't you heard? Fancy|colours are the new black!	哎哟，瞧你们一个个凶巴巴的。没听说吗？花里胡哨才是今年的黑色。	哎唷，扮晒兇神惡煞咁？話你知，今年最興鮮色，黑色早就Out喇！
-speech.rainbowBeard.2	I'd have beaten you sooner if|your fancy beards didn't|keep catchin' the light!	要不是你们那几把花胡子一直反光，我们早打完了。	如果唔係你哋幾把花鬍鬚係咁反光，我一早收咗你哋皮！
-speech.rainbowBeard.3	Oo-er! Now we're finished|with them, it's time for a|bit of retail therapy!	收工！接下来当然是——逛街疗伤。	搞掂！打完呢鋪，係時候去買嘢減壓！
-speech.cabinBoy.0	Yarrgh! ...ye be wanting to|grow a proper beard before|taking on the likes of us,|boys...	小鬼，胡子都没长齐就敢跟海盗打？	細路，返去生返兩條鬍鬚先好出嚟同海盜隻揪啦。
-speech.cabinBoy.1	We're no boys! I had a couple|of hairs only last month on|me chin, just ask me mum!	谁是小鬼！我上个月下巴明明长了两根毛！不信问我妈！	邊個係細路！我下巴上個月明明出咗兩條毛，唔信問我阿媽！
-speech.cabinBoy.2	Yarrgh! Best be running|along home now boys! I think|it be past yer bedtime?	好了小朋友，快回家。早过睡觉时间了。	快啲返屋企啦小朋友，過晒瞓覺時間喇。
-speech.cabinBoy.3	That was fun... just like a|Nitrome video game! LOL!	真好玩！跟 Nitrome 的小游戏一样！LOL！	好好玩，成隻 Nitrome 電腦遊戲咁！LOL！
-speech.tribe.0	Garrgh! I've got a bad feelin'|about this lads! They be|lookin' kinda hungry!	伙计们，我有种不祥的预感……他们看咱们不像看客人，像看晚饭。	我有種唔多好嘅預感……佢哋望我哋個眼神，好似望緊晚餐咁！
-speech.tribe.1	Get the cookin' pot ready...|pirate stew tonight!	把锅架起来！今晚炖海盗！	落鑊起火！今晚燉海盜！
-speech.tribe.2	Good work lads! we've|avoided being lunch... looks|like they'll have to stick|with mangos and coconuts|from now on!	干得好！今天不用当午饭了。让他们老老实实啃芒果和椰子吧。	好嘢伙計們！唔使做午餐喇，等佢哋以後乖乖食芒果同椰子啦！
-speech.tribe.3	mmmmmmm! can't remember|the last time we had a good|pirate stew!|...has anyone got the salt?	嗯——好久没吃过这么香的海盗炖肉了。谁有盐？	好耐冇食過咁香嘅燉海盜……喂，有冇人有鹽？
-speech.skeletonPirate.0	This crew looks like they|could do with a good feed|more than a fight...	这帮家伙看起来更需要吃顿饭，而不是挨顿打。	對面望落似想食餐飽飯多過想打交……
-speech.skeletonPirate.1	you'll have to catch us all|first ...fatty!	先追得上我们再说吧，胖子！	追得到我哋先講啦，死肥仔！
-speech.skeletonPirate.2	I am rubber, you are glue!	反弹！反弹！你说什么都反弹！	反彈！反彈！你講乜都反彈！
-speech.skeletonPirate.3	Sticks and stones may break|my bones but pirates never|hurt me!	棍棒石头能敲断我的骨头，可你们这些海盗不行！	棍棒石仔最多打斷我啲骨頭，你班海盜傷我唔到！
-speech.bossGuy.0	Garrrgh! what a big hat...|I think he be trying to|make up for something, lads!	好大一顶帽子……伙计们，他该不会是在补偿什么吧？	頂帽咁大……伙計，佢係咪想掩飾自己咩地方唔夠長呀？
-speech.bossGuy.1	Argh! ye not be winning with|a hat like that. And once I|win I'll be taking your hats.	戴成你们这样也想赢？等我打完，帽子全归我。	戴頂咁嘅帽都想贏？等我贏咗，搶晒你哋啲帽！
-speech.bossGuy.2	I think he was a little|hot-headed...|maybe it was his hat!	脾气这么火爆……八成是帽子捂的。	條友火氣咁大……肯定係頂帽焗壞咗個腦！
-speech.bossGuy.3	These hats 'll be a mighty|fine addition to my|collection!	不错不错，又能给我的帽子收藏添几件了。	呢幾頂帽幾靚，又可以加落我嘅收藏度！
-speech.bossGuyZombie.0	I think he's been playing|with a few too many|voodoo dolls, lads! he's back|from Davey Jones locker.	伙计们，他巫毒娃娃是不是玩多了？这家伙从戴维·琼斯的海底坟场爬回来了！	條友係咪玩巫毒娃娃玩上腦？佢由大衛瓊斯嘅海底墓地爬返出嚟喇！
-speech.bossGuyZombie.1	aaaaaaaaahhhhhhhh...|hhhhhaaaaattttttss...|errrr... I mean...|bbbbrrraaaiiinnsss...	帽——子——……呃，不对……脑——子——……	帽——子——……呃，唔係……腦——漿——……
-speech.bossGuyZombie.2	Yo-Ho-Ho... we've done it|lads! that finished him off...|eerrrrm didn't we?	哟呵呵！这回总算干掉他了！……应该吧？	喲呵呵！總算搞掂佢……應該係？
-speech.bossGuyZombie.3	Yar hats be mine after all!|hhhhhaaaaattttttss!!!	帽子最后还是我的！帽——子——！！！	頂帽最後都係我嘅！帽——子——！！！
-speech.robot.0	Shiver me timbers! Look at all that shiny metal! We’ll pry those glowing glass eyes off yer heads and sell 'em for rum!	老天开眼！瞧瞧这一身锃光瓦亮的精铁！伙计们，把它们头上发光的琉璃眼珠子抠下来，够咱们喝一辈子朗姆酒！	老天開眼！睇下呢身金光閃閃嘅精鐵！伙計，撬晒佢哋粒發光琉璃眼珠落嚟，夠我哋飲成世冧酒！
-speech.robot.1	Work it, make it, do it, makes us.	运转、制造、执行、成型。	運轉、製造、執行、成型。
-speech.robot.2	Ha! Big shiny suit, but yer still hollow inside! Grab the crowbars, lads—let's smash these tin cans for scrap!	哈！看着挺唬人，里头原来也是个空心的！伙计们，抄撬棍，把这几只烂铁罐头砸碎了卖废铁！	哈！睇落幾咁巴閉，原來入面都係空心嘅！手足，抄鐵筆，砸爛呢幾隻破鐵罐賣廢鐵！
-speech.robot.3	Harder, better, faster, stronger.	更强、更好、更快、更狠。	更強、更好、更快、更狠。
+speech.squid.0	Arrrgh what sort o' sea|beastie be this?	哎呀呀！这又是哪门子的海怪，伙计们？
+speech.squid.1	Splund splund... I'm gonna|ink you up... splund splund.	噗噜，噗噜……瞧我把你们喷成墨水罐！噗噜！
+speech.squid.2	Yearggh take that you|varmint, we be eating squid|rings tonight.	哈哈，尝到厉害了吧！伙计们，今晚吃炸鱿鱼圈！
+speech.squid.3	Splund splund... I'm so|happy I've just inked|myself... splund.	噗噜，噗噜……我高兴得连自己都喷黑啦！噗噜！
+speech.crab.0	Looks like we've got a|bad case of the crabs|here, mateys!	哎哟，伙计们！咱们可惹上了一群横行的家伙！
+speech.crab.1	Prepare to lose your|beards... snip snip!	胡子留好了！咔嚓，咔嚓……我要开剪啦！
+speech.crab.2	I think we shell-shocked|them, mateys!	哈哈，伙计们！这回连壳都给他们吓软啦！
+speech.crab.3	Looks like they fell for|our deadly pincer|manoeuvre... at last their|beards be ours.	哈！夹击妙计，百发百中！你们的胡子，归我们啦！
+speech.shark.0	Ahoy. I think there be|something fishy here.	喂，伙计们！我闻见了……好大一股鱼腥味！
+speech.shark.1	We're gonna hammer you!|You're Shark Bait!	瞧我这记铁头锤！你们就等着当鲨鱼饵吧！
+speech.shark.2	Ya Har! 'Twas too easy!|But thar be plenty more|fish in the sea!	哈哈，轻而易举！不过嘛，大海里的鱼可多着呢！
+speech.shark.3	Stop! ...Hammer-time!	都站住！现在是……铁头锤时间！
+speech.parrot.0	Arrrgh!... Who be a pretty|boy then? ...Does Polly|want a cracker?	哟，谁是漂亮的小乖乖呀？波莉，要不要块饼干？
+speech.parrot.1	Squawk!... Who's a pretty|boy then? ...Squawk!...|Polly want a cracker!|...Squawk!	嘎！谁是漂亮的小乖乖？嘎！波莉要饼干！嘎！
+speech.parrot.2	Arrrgh... 'tiz a shame.|They could have made fine|shoulder enhancers.	唉，可惜啦！本来还能给咱们肩膀添点风光呢！
+speech.parrot.3	Squawk!... Polly want a|cracker!	嘎！波莉要饼干！
+speech.monkey.0	Guard the fruit mateys...|If the monkeys get it we'll|be up for another bout|of scurvy!	守住水果，伙计们！叫猴子抢了去，坏血病又得找上门啦！
+speech.monkey.1	Oooh Oooh Ahh Ahh Bananas!	呜呜！啊啊！香蕉！
+speech.monkey.2	Yarrgh! Yer monkey business|ain't foolin' any of us!	哈！少耍猴戏啦！咱们可没那么好糊弄！
+speech.monkey.3	Oooh Oooh Ahh Ahh More|Bananas!	呜呜！啊啊！还要香蕉！
+speech.soldier.0	These boys look too clean|to be in a real fight! And|look... they've still got|teeth to knock out!	哟，制服真干净！打过架吗？瞧，牙还都在，正好练练手！
+speech.soldier.1	We fight for King and|Country! ...and because we|get a decent benefits|package and pension plan!	为国王和国家而战！当然，还有优厚的福利……和退休金！
+speech.soldier.2	They don't look so smart|now lads... I think We'll|be using his toupee to swab|the decks!	瞧，还神气吗？伙计们，拿他的假发擦甲板去！
+speech.soldier.3	You pirates will get what|you deserve... a short drop|and a sudden stop!	海盗们，报应来啦！绳圈一套，脚下一空……就此告别！
+speech.blindPirate.0	Yargh... These guys have|one too many eye patches!|This should be easy! Let's|get 'em!	哈！他们的眼罩也太多啦！伙计们，这回闭着眼都能赢！
+speech.blindPirate.1	Get who? Where am I...|how did I get here?	赢谁？我在哪儿？哎，我怎么跑到这儿来了？
+speech.blindPirate.2	Yarrgh!|They didn't see us coming!	哈哈！咱们这招，可真叫他们看不见啊！
+speech.blindPirate.3	Gar... I can't hear them...|Does anyone know if we|won?	哎，怎么没声啦？谁告诉我……咱们赢了吗？
+speech.femalePirate.0	Garrrgh... Looks like we've|found ourselves some|mighty fine booty here,|mateys!	哟呵，伙计们！瞧瞧，眼前可都是上好的“宝贝”呀！
+speech.femalePirate.1	Yarp... The only booty you|will be getting is on the|end of my foot!	哼！你能捞着的“宝贝”，就只有本姑娘这一脚！
+speech.femalePirate.2	Arrgh... shame... what a|waste of such lovely|sea legs!	唉，真可惜！白瞎了这么漂亮的水手腿！
+speech.femalePirate.3	Yarp... Everybody knows|girls are better than boys!	哈！这还用说？姑娘们就是比小伙子强！
+speech.oldPirate.0	Arrrrggggh... I think we|found some old sea dogs!|Ready for retirement!	哟呵，一群老海狗！各位，该上岸养老啦！
+speech.oldPirate.1	We're not Old, we're|experienced... and now we're|gonna kick your... erm...|erm... what was I saying|again... who are you?	老？这叫经验！瞧我踢你们的……呃，说到哪儿了？你是谁？
+speech.oldPirate.2	Garrrrgh! Ok, Grandads...|time for your afternoon|nap!	好啦，老爷子们！午睡时间到，乖乖闭眼吧！
+speech.oldPirate.3	That'll show you... in my|day we used to fight a|Kraken with nothin' but a|couple o' stones. Arrrgh...|Those be the days...	服了吧！想当年，几块石头就能打海怪！唉，那才叫好日子！
+speech.rainbowBeard.0	This guy be looking a little|too jolly to be flying the|ol' jolly roger, eh mateys?	伙计们，瞧这花枝招展的！挂骷髅旗，他是不是高兴过头啦？
+speech.rainbowBeard.1	Ohhhh look at you... don't|you look tough? Anyway,|haven't you heard? Fancy|colours are the new black!	哎哟，真威风呀！可你还不知道？五彩缤纷才是新潮流！
+speech.rainbowBeard.2	I'd have beaten you sooner if|your fancy beards didn't|keep catchin' the light!	要不是你们的花胡子晃得我眼花，早就收拾完啦！
+speech.rainbowBeard.3	Oo-er! Now we're finished|with them, it's time for a|bit of retail therapy!	哎呀，打完收工！走，逛商店，好好犒劳自己！
+speech.cabinBoy.0	Yarrgh! ...ye be wanting to|grow a proper beard before|taking on the likes of us,|boys...	小家伙们，想跟咱们较量？先长出一把像样的胡子吧！
+speech.cabinBoy.1	We're no boys! I had a couple|of hairs only last month on|me chin, just ask me mum!	我才不是小孩！上个月下巴就长了两根毛！不信问我妈妈！
+speech.cabinBoy.2	Yarrgh! Best be running|along home now boys! I think|it be past yer bedtime?	回家去吧，小家伙们！早过了你们的睡觉时间啦！
+speech.cabinBoy.3	That was fun... just like a|Nitrome video game! LOL!	真好玩！就像玩了局 Nitrome 游戏！哈哈！
+speech.tribe.0	Garrgh! I've got a bad feelin'|about this lads! They be|lookin' kinda hungry!	伙计们，我有种不祥的预感……他们好像饿坏了！
+speech.tribe.1	Get the cookin' pot ready...|pirate stew tonight!	架起大锅！今晚开荤，炖海盗！
+speech.tribe.2	Good work lads! we've|avoided being lunch... looks|like they'll have to stick|with mangos and coconuts|from now on!	干得漂亮！咱们没成午饭！让他们啃芒果、嚼椰子去吧！
+speech.tribe.3	mmmmmmm! can't remember|the last time we had a good|pirate stew!|...has anyone got the salt?	嗯……好久没尝过海盗炖汤啦！哎，谁把盐递过来？
+speech.skeletonPirate.0	This crew looks like they|could do with a good feed|more than a fight...	瞧这一船伙计！他们缺的不是一场架，是一顿饱饭！
+speech.skeletonPirate.1	you'll have to catch us all|first ...fatty!	先追得上我们再说吧……胖墩儿！
+speech.skeletonPirate.2	I am rubber, you are glue!	我是橡皮你是胶，骂我的话全弹回你身上！
+speech.skeletonPirate.3	Sticks and stones may break|my bones but pirates never|hurt me!	棍子石头能打断骨头，你们这些海盗可伤不了我！
+speech.bossGuy.0	Garrrgh! what a big hat...|I think he be trying to|make up for something, lads!	哟，这帽子可真够大！伙计们，他是不是想遮掩点什么呀？
+speech.bossGuy.1	Argh! ye not be winning with|a hat like that. And once I|win I'll be taking your hats.	戴那种帽子还想赢？等我赢了，你们的帽子也全归我！
+speech.bossGuy.2	I think he was a little|hot-headed...|maybe it was his hat!	瞧他那副火冒三丈的样子！八成是帽子捂得太热啦！
+speech.bossGuy.3	These hats 'll be a mighty|fine addition to my|collection!	妙极啦！这些帽子，正好给我的收藏添点新花样！
+speech.bossGuyZombie.0	I think he's been playing|with a few too many|voodoo dolls, lads! he's back|from Davey Jones locker.	伙计们，巫毒娃娃可不能乱玩！这家伙从海底鬼门关回来啦！
+speech.bossGuyZombie.1	aaaaaaaaahhhhhhhh...|hhhhhaaaaattttttss...|errrr... I mean...|bbbbrrraaaiiinnsss...	啊——帽——子——！呃，我是说……脑——子——！
+speech.bossGuyZombie.2	Yo-Ho-Ho... we've done it|lads! that finished him off...|eerrrrm didn't we?	哟呵呵！伙计们，这回总算收拾掉他啦！呃……是吧？
+speech.bossGuyZombie.3	Yar hats be mine after all!|hhhhhaaaaattttttss!!!	你们的帽子，到头来还是我的！帽——子——！
 # Ending dialogue: original DangleFont construction actions in sprites 784, 788, 791, 793, 795.
-speech.ending.0	Arrgh, Ahoy mateys! That|be too easy. Them bunch of|lilly livred land lubbers|never stood a chance.|we be both filthy and rich |now. Nothing be standing in |our way. Yo ho ho...	哟呵，伙计们！也太轻松了！那帮没胆子的旱鸭子压根儿不是咱们的对手。现在咱们又脏、又有钱，谁也拦不住了！哟呵呵……	喲呵，伙計們！太輕鬆喇！嗰班冇膽旱鴨子根本唔係對手。而家我哋又滿身油污又富得流油，神仙都擋唔住！喲呵呵……
-speech.ending.1	Aye... that be true. Unless|we be bumping into the|kraken that is?	没错……除非咱们哪天撞上克拉肯。	係呀……真係過癮。除非我哋撞到大海怪克拉肯？
-speech.ending.2	kraken... what kraken?	克拉肯？什么克拉肯？	克拉肯？咩克拉肯？
-speech.ending.3	Yearrrgh... I think he be on |about the sequel captin!	呃，船长……我觉得他说的是续集。	呃……船長，我諗佢講緊續集！
-speech.ending.4	...Sequel ...what sequel?	……续集？什么续集？	……續集？咩續集？
-corner.quit	quit	退出	離開
-corner.music	music	音乐	音樂
-corner.sfx	sound fx	音效	音效
+speech.ending.0	Arrgh, Ahoy mateys! That|be too easy. Them bunch of|lilly livred land lubbers|never stood a chance.|we be both filthy and rich |now. Nothing be standing in |our way. Yo ho ho...	哟呵，伙计们！小菜一碟！那帮胆小的旱鸭子哪是咱们的对手！如今咱们又脏又阔，谁也挡不住！哟呵呵！
+speech.ending.1	Aye... that be true. Unless|we be bumping into the|kraken that is?	是啊，没错……只要别一头撞上海怪克拉肯就好。
+speech.ending.2	kraken... what kraken?	克拉肯？什么克拉肯？
+speech.ending.3	Yearrrgh... I think he be on |about the sequel captin!	哎呀，船长！我想，他说的是续集吧！
+speech.ending.4	...Sequel ...what sequel?	……续集？什么续集？
+corner.quit	quit	退出
+corner.music	music	音乐
+corner.sfx	sound fx	音效
+frontend.lan_play	lan battle	局域网对战
+frontend.lan_host	create host	建立主机
+frontend.lan_join	join	加入游戏
+frontend.ip	host ip	主机 IP
+frontend.lan_waiting	waiting for a player...	等待玩家加入...
+frontend.connecting	connecting...	正在连接...
+frontend.lan_host_ready	player joined! pick a level	玩家已加入！请选择关卡
+frontend.lan_client_ready	connected! waiting for the host...	已连接！等待主机选择关卡...
+frontend.lan_in_match	match in progress	对战中
+frontend.disconnected	disconnected	连接已断开
+frontend.quick_battle_off	quick battle: off	快速战斗：关
+frontend.quick_battle_on	quick battle: on	快速战斗：开
+frontend.first_player_random	first player: random	先手：随机
+frontend.first_player_p1	first player: 1P	先手：1P
+frontend.first_player_p2	first player: 2P	先手：2P
+frontend.cheats_off	cheats: off	作弊：关
+frontend.cheats_on	cheats: on	作弊：开

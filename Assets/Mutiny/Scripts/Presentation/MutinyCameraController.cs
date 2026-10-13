@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Mutiny.Levels;
+using Mutiny.Network;
 using Mutiny.Simulation;
 using Mutiny.Diagnostics;
 using UnityEngine;
@@ -20,6 +21,10 @@ namespace Mutiny.Presentation
         private const float OriginalScrollAccelerationPixelsPerTick = 1f;
         private const float OriginalTrackingPixelsPerTick = 30f;
         private const float OriginalTrackingVerticalOffsetPixels = 50f;
+        // Pinch zoom limits around the authored framing: 1x is the original
+        // 550x400 viewport (orthographicSize 6.25), larger zooms in.
+        public const float MinimumZoomScale = 0.6f;
+        public const float MaximumZoomScale = 2f;
         // DefineSprite_1813_cursor: labelled scroll1 at frame 78 and scroll2
         // at frame 87. These are exact 31x22 PNG exports, not redrawn arrows.
         private const string ScrollCardinalPng =
@@ -40,6 +45,7 @@ namespace Mutiny.Presentation
         private MutinyCharacter m_TurnFocusCharacter;
         private MutinyWeapon m_TrackedWeapon;
         private Vector2 m_EdgeVelocityPixelsPerSecond;
+        private float m_ZoomScale = 1f;
         private bool m_AirDropCameraWasLocked;
         private Vector2 m_DesktopScrollDirection;
         private bool m_DesktopScrollCursorWasVisible;
@@ -62,7 +68,7 @@ namespace Mutiny.Presentation
             if (ExplosionCameraEnabled == enabled && enabled)
                 return;
             ExplosionCameraEnabled = enabled;
-            foreach (MutinyCameraController controller in FindObjectsByType<MutinyCameraController>())
+            foreach (MutinyCameraController controller in FindObjectsByType<MutinyCameraController>(FindObjectsSortMode.None))
                 controller.ClearExplosionCamera();
         }
 
@@ -102,6 +108,8 @@ namespace Mutiny.Presentation
         }
 
         public bool IsTrackingAirDrop => FindFallingChest() != null;
+        /// <summary>Pinch zoom factor: 1x is the authored framing, larger zooms in.</summary>
+        public float ZoomScale => m_ZoomScale;
         public bool IsPanningToTurnTarget => m_TurnPanTarget != null;
         public MutinyCharacter TurnFocusCharacter
         {
@@ -122,7 +130,7 @@ namespace Mutiny.Presentation
             if (mainCamera != null && mainCamera.GetComponent<MutinyCameraController>() == null)
                 mainCamera.gameObject.AddComponent<MutinyCameraController>();
 
-            foreach (MutinyCameraController controller in FindObjectsByType<MutinyCameraController>())
+            foreach (MutinyCameraController controller in FindObjectsByType<MutinyCameraController>(FindObjectsSortMode.None))
                 controller.ResetForLevel(level);
         }
 
@@ -150,6 +158,9 @@ namespace Mutiny.Presentation
             PlayerInput = level.GetComponent<MutinyPlayerInput>();
             m_Speech = level.GetComponent<MutinySpeechController>();
             ApplyViewportLetterbox();
+            // Every level opens at the authored framing; a zoom belongs to the
+            // session it was made in, not to the next one.
+            ResetZoom();
 
             // TileSystem.readXML always calls panCamera(0, 0, true). Flash stores
             // the viewport top-left, whereas Unity stores its centre (Y is up).
@@ -183,7 +194,7 @@ namespace Mutiny.Presentation
 
         public static void RequestTrackWeapon(MutinyWeapon weapon)
         {
-            MutinyCameraController[] controllers = FindObjectsByType<MutinyCameraController>();
+            MutinyCameraController[] controllers = FindObjectsByType<MutinyCameraController>(FindObjectsSortMode.None);
             for (int i = 0; i < controllers.Length; i++)
             {
                 if (controllers[i] != null)
@@ -193,7 +204,7 @@ namespace Mutiny.Presentation
 
         public static void ReleaseWeaponTracking(MutinyWeapon weapon)
         {
-            MutinyCameraController[] controllers = FindObjectsByType<MutinyCameraController>();
+            MutinyCameraController[] controllers = FindObjectsByType<MutinyCameraController>(FindObjectsSortMode.None);
             for (int i = 0; i < controllers.Length; i++)
             {
                 if (controllers[i] != null && controllers[i].m_TrackedWeapon == weapon)
@@ -203,7 +214,7 @@ namespace Mutiny.Presentation
 
         public static void RequestPanToCharacter(MutinyCharacter character)
         {
-            MutinyCameraController[] controllers = FindObjectsByType<MutinyCameraController>();
+            MutinyCameraController[] controllers = FindObjectsByType<MutinyCameraController>(FindObjectsSortMode.None);
             for (int i = 0; i < controllers.Length; i++)
             {
                 if (controllers[i] != null)
@@ -244,15 +255,12 @@ namespace Mutiny.Presentation
                 return;
             }
 
-            // Flash distinguishes Controller.twanging (jump/weapon charge) from
-            // dragging. A mouse charge permits manual edge/key scrolling while
-            // suppressing automatic pans; do not treat all IsAiming as dragging.
+            // TileSystem.advanceScrolling returns before every automatic camera
+            // branch while Controller.dragging is set (human player dragging).
             if (PlayerInput != null && PlayerInput.IsAiming)
             {
                 if (PlayerInput.IsControllerAiming)
                     AdvanceControllerScrolling(deltaTime);
-                else if (PlayerInput.ArmedCannon == null || !PlayerInput.ArmedCannon.IsDraggingBody)
-                    AdvanceEdgeScrolling(deltaTime);
                 return;
             }
 
@@ -341,7 +349,7 @@ namespace Mutiny.Presentation
                 return;
             }
 
-            AdvanceEdgeScrolling(deltaTime);
+            AdvanceEdgeScrolling();
         }
 
         internal static bool ShouldPauseForAiThinking(bool isAiControlled, bool isEvaluatingCandidates)
@@ -381,7 +389,7 @@ namespace Mutiny.Presentation
                 : null;
             if (selectedCharacter != null)
             {
-                MutinyCannon[] cannons = FindObjectsByType<MutinyCannon>();
+                MutinyCannon[] cannons = FindObjectsByType<MutinyCannon>(FindObjectsSortMode.None);
                 for (int i = 0; i < cannons.Length; i++)
                 {
                     MutinyCannon cannon = cannons[i];
@@ -421,7 +429,7 @@ namespace Mutiny.Presentation
             if (MutinyPiecesOfEight.HasPlayerAwaitingNextCoin(TurnManager.CurrentTeam))
                 return null;
 
-            MutinyWeapon[] weapons = FindObjectsByType<MutinyWeapon>();
+            MutinyWeapon[] weapons = FindObjectsByType<MutinyWeapon>(FindObjectsSortMode.None);
             for (int i = 0; i < weapons.Length; i++)
             {
                 // BoxWeapon.place clears track on the placed Solid. AI focus is
@@ -527,7 +535,7 @@ namespace Mutiny.Presentation
                                   (Vector2)transform.position).sqrMagnitude;
                 if (distance < nearestDistance ||
                     (distance == nearestDistance && m_ExplosionFocus != null &&
-                     character.GetEntityId().CompareTo(m_ExplosionFocus.GetEntityId()) < 0))
+                     character.GetInstanceID().CompareTo(m_ExplosionFocus.GetInstanceID()) < 0))
                 {
                     nearestDistance = distance;
                     m_ExplosionFocus = character;
@@ -555,7 +563,7 @@ namespace Mutiny.Presentation
                 (selected.IsSelfThrown && selected.PhysicsBody != null && !selected.PhysicsBody.IsAtRest))
                 return false;
 
-            foreach (MutinyWeapon weapon in FindObjectsByType<MutinyWeapon>())
+            foreach (MutinyWeapon weapon in FindObjectsByType<MutinyWeapon>(FindObjectsSortMode.None))
             {
                 if (weapon.Owner != selected || !weapon.isActiveAndEnabled)
                     continue;
@@ -646,7 +654,7 @@ namespace Mutiny.Presentation
             return nearest;
         }
 
-        private void AdvanceEdgeScrolling(float deltaTime)
+        private void AdvanceEdgeScrolling()
         {
             if (IsFrontendPageVisible())
             {
@@ -656,14 +664,15 @@ namespace Mutiny.Presentation
             }
             if (MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive)
             {
-                AdvanceControllerScrolling(deltaTime);
+                AdvanceControllerScrolling(Time.deltaTime);
                 return;
             }
             bool canScroll = CanUseManualScrolling() &&
                              TurnManager.CurrentTeam != null &&
                              !TurnManager.CurrentTeam.IsAiControlled &&
                              PlayerInput != null &&
-                             !PlayerInput.IsActionMenuOpen;
+                             !PlayerInput.IsActionMenuOpen &&
+                             !PlayerInput.IsAiming;
 
             Vector2 direction = Vector2.zero;
             Mouse mouse = Mouse.current;
@@ -707,9 +716,9 @@ namespace Mutiny.Presentation
             m_EdgeVelocityPixelsPerSecond = Vector2.MoveTowards(
                 m_EdgeVelocityPixelsPerSecond,
                 direction * maximumSpeed,
-                acceleration * deltaTime);
+                acceleration * Time.deltaTime);
 
-            Vector2 movementPixels = m_EdgeVelocityPixelsPerSecond * deltaTime;
+            Vector2 movementPixels = m_EdgeVelocityPixelsPerSecond * Time.deltaTime;
             Vector3 positionWorld = transform.position;
             positionWorld.x += movementPixels.x / MutinyPhysics.PixelsPerUnit;
             positionWorld.y += movementPixels.y / MutinyPhysics.PixelsPerUnit;
@@ -818,6 +827,56 @@ namespace Mutiny.Presentation
             scrollUp |= mousePosition.y > viewportPixelRect.yMax - edgePixels;
         }
 
+        /// <summary>The authored orthographic size for the 400 px tall viewport (6.25 at 32 PPU).</summary>
+        internal static float OriginalOrthographicSize =>
+            OriginalVerticalPixels * 0.5f / MutinyPhysics.PixelsPerUnit;
+
+        internal static float ClampZoomScale(float zoomScale) =>
+            Mathf.Clamp(zoomScale, MinimumZoomScale, MaximumZoomScale);
+
+        internal static float ResolveOrthographicSize(float zoomScale) =>
+            OriginalOrthographicSize / Mathf.Max(0.0001f, zoomScale);
+
+        /// <summary>
+        /// Two-finger pinch. distanceRatio is this frame's finger distance over
+        /// the previous one, so spreading the fingers zooms the view in. Zoom is
+        /// local presentation only: it never reaches the deterministic simulation.
+        /// The mobile gate lives with the callers (CanStartMobilePinchZoom and the
+        /// touch layer), so the scripted verification can drive this same path.
+        /// </summary>
+        public bool ZoomByPinchRatio(float distanceRatio) => ApplyZoomRatio(distanceRatio);
+
+        // Verification drives the same production zoom application, exactly like
+        // ApplyMobileTouchPanForVerification does for the touch pan.
+        internal bool ZoomByPinchRatioForVerification(float distanceRatio) => ApplyZoomRatio(distanceRatio);
+
+        private bool ApplyZoomRatio(float distanceRatio)
+        {
+            EnsureReferences();
+            if (m_Camera == null || float.IsNaN(distanceRatio) || distanceRatio <= 0f)
+                return false;
+
+            float next = ClampZoomScale(m_ZoomScale * distanceRatio);
+            if (Mathf.Approximately(next, m_ZoomScale))
+                return false;
+
+            m_ZoomScale = next;
+            m_Camera.orthographicSize = ResolveOrthographicSize(m_ZoomScale);
+            // A narrower or wider view can put the clamped centre outside the
+            // visible window; re-apply the level bounds with the new framing.
+            SetClampedPosition(transform.position);
+            return true;
+        }
+
+        private void ResetZoom()
+        {
+            if (m_Camera == null)
+                m_Camera = GetComponent<Camera>();
+            m_ZoomScale = 1f;
+            if (m_Camera != null)
+                m_Camera.orthographicSize = OriginalOrthographicSize;
+        }
+
         public bool CanStartMobileTouchPan(bool allowWhileAiming = false)
         {
             EnsureReferences();
@@ -834,6 +893,24 @@ namespace Mutiny.Presentation
             bool isAiming, bool allowWhileAiming)
         {
             return !isAiming || allowWhileAiming;
+        }
+
+        /// <summary>
+        /// Pinch-zoom gate. It mirrors the touch-pan gate but deliberately stays
+        /// true while the camera is auto-following an action or panning to its
+        /// own target: zooming a tracked shot is useful and never fights the
+        /// automatic pan.
+        /// </summary>
+        public bool CanStartMobilePinchZoom(bool allowWhileAiming = false)
+        {
+            EnsureReferences();
+            return Application.isMobilePlatform &&
+                   !HasExplosionCameraTarget &&
+                   m_Camera != null && m_LevelRoot != null && TurnManager != null &&
+                   TurnManager.CurrentTeam != null && !TurnManager.CurrentTeam.IsAiControlled &&
+                   PlayerInput != null && !PlayerInput.IsActionMenuOpen &&
+                   IsAimingCompatibleWithMobilePan(PlayerInput.IsAiming, allowWhileAiming) &&
+                   CanUseManualScrolling();
         }
 
         public bool PanByMobileTouchDelta(Vector2 screenDelta, bool allowWhileAiming = false)
@@ -885,7 +962,13 @@ namespace Mutiny.Presentation
             if (!MutinyTreasureChestManager.SystemEnabled)
                 return null;
 
-            MutinyTreasureChest[] chests = FindObjectsByType<MutinyTreasureChest>();
+            // AIR-02 quick battle: the drop is fast enough to watch from the
+            // normal turn view, so the camera deliberately stays with the action
+            // instead of panning down with the chest.
+            if (!ShouldTrackAirDrop(MutinyNetworkManager.QuickBattleActive))
+                return null;
+
+            MutinyTreasureChest[] chests = FindObjectsByType<MutinyTreasureChest>(FindObjectsSortMode.None);
             for (int i = 0; i < chests.Length; i++)
             {
                 if (chests[i] != null && chests[i].IsFalling && chests[i].TimeTaken < 100)
@@ -893,6 +976,8 @@ namespace Mutiny.Presentation
             }
             return null;
         }
+
+        internal static bool ShouldTrackAirDrop(bool quickBattle) => !quickBattle;
 
         private static Vector3 GetPresentationPosition(Transform target)
         {

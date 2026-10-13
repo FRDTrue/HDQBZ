@@ -1,7 +1,5 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using Mutiny.Levels;
 using UnityEngine;
 
 namespace Mutiny.Presentation
@@ -42,15 +40,8 @@ namespace Mutiny.Presentation
         private Dictionary<string, AudioClip> m_MusicClips = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
 
         // Production diagnostics and parity tests observe actual resolved SFX here.
-        // The event reports the final clip name after a valid playback submission.
+        // The event is raised only when a loaded clip is about to be played.
         public event Action<string> SfxPlayed;
-
-        private readonly Queue<(MutinyLevelRoot Level, float Volume)> m_RobotVoiceRequests = new();
-        private Coroutine m_RobotVoiceRoutine;
-        private Coroutine m_SpeechRoutine;
-        private MutinySpeechController m_SpeechOwner;
-        private AudioSource m_SpeechSource;
-        private AudioSource m_RobotVoiceSource;
 
         private void Awake()
         {
@@ -83,10 +74,6 @@ namespace Mutiny.Presentation
             }
 
             LoadAllAudioClips();
-            m_SpeechSource = gameObject.AddComponent<AudioSource>();
-            m_SpeechSource.playOnAwake = false;
-            m_RobotVoiceSource = gameObject.AddComponent<AudioSource>();
-            m_RobotVoiceSource.playOnAwake = false;
         }
 
         private void LoadAllAudioClips()
@@ -112,116 +99,14 @@ namespace Mutiny.Presentation
 
         public void PlaySFX(string soundName, float volumeScale = 1f)
         {
-            if (!SfxEnabled || SfxSource == null || !SfxSource.isActiveAndEnabled || string.IsNullOrEmpty(soundName))
+            if (!SfxEnabled || SfxSource == null || string.IsNullOrEmpty(soundName))
                 return;
-
-            MutinyLevelRoot robotLevel = null;
-            if (string.Equals(soundName, "Robot", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(soundName, "RobotCaptain", StringComparison.OrdinalIgnoreCase))
-            {
-                robotLevel = FindRobotVoiceLevel();
-                if (robotLevel != null)
-                {
-                    if (!m_SfxClips.ContainsKey($"daftpunk_{robotLevel.NextRobotVoiceNumber:D2}")) return;
-                    m_RobotVoiceRequests.Enqueue((robotLevel, volumeScale));
-                    if (m_RobotVoiceRoutine == null)
-                        m_RobotVoiceRoutine = StartCoroutine(PlayRobotVoiceRequests());
-                    return;
-                }
-            }
 
             if (m_SfxClips.TryGetValue(soundName, out AudioClip clip))
             {
-                SfxSource.PlayOneShot(clip, SfxVolume * volumeScale);
                 SfxPlayed?.Invoke(soundName);
+                SfxSource.PlayOneShot(clip, SfxVolume * volumeScale);
             }
-        }
-
-        private bool CanPlayRobotVoice(MutinyLevelRoot level) =>
-            level != null && level == FindRobotVoiceLevel() && SfxEnabled &&
-            SfxSource != null && SfxSource.isActiveAndEnabled;
-
-        private IEnumerator PlayRobotVoiceRequests()
-        {
-            // Yield once so the coroutine handle is assigned even if a request
-            // becomes invalid before its first submission.
-            yield return null;
-            while (m_RobotVoiceRequests.Count > 0)
-            {
-                while (m_SpeechRoutine != null) yield return null;
-                var request = m_RobotVoiceRequests.Dequeue();
-                for (int part = 0; part < 2; part++)
-                {
-                    if (!CanPlayRobotVoice(request.Level)) break;
-                    string name = $"daftpunk_{request.Level.NextRobotVoiceNumber:D2}";
-                    if (!m_SfxClips.TryGetValue(name, out AudioClip clip) || clip == null) break;
-                    m_RobotVoiceSource.pitch = SfxSource.pitch;
-                    m_RobotVoiceSource.PlayOneShot(clip, SfxVolume * request.Volume);
-                    request.Level.AdvanceRobotVoiceSequence();
-                    double duration = clip.length / Math.Max(.01f, Mathf.Abs(SfxSource.pitch));
-                    double deadline = Time.realtimeSinceStartupAsDouble + duration + (part == 0 ? .5 : 0);
-                    SfxPlayed?.Invoke(name);
-                    while (Time.realtimeSinceStartupAsDouble < deadline && CanPlayRobotVoice(request.Level))
-                        yield return null;
-                }
-            }
-            m_RobotVoiceRoutine = null;
-        }
-
-        public void PlaySpeechAudio(MutinySpeechController owner, MutinySpeechAudio sequence)
-        {
-            CancelSpeechAudio(m_SpeechOwner);
-            // A scripted speech takes priority over pending selection voices.
-            if (m_RobotVoiceRoutine != null) StopCoroutine(m_RobotVoiceRoutine);
-            m_RobotVoiceRoutine = null;
-            m_RobotVoiceRequests.Clear();
-            m_RobotVoiceSource?.Stop();
-            if (owner == null || sequence == null || !SfxEnabled || m_SpeechSource == null) return;
-            m_SpeechOwner = owner;
-            m_SpeechRoutine = StartCoroutine(PlaySpeechSequence(owner, sequence));
-        }
-
-        public void CancelSpeechAudio(MutinySpeechController owner)
-        {
-            if (m_SpeechOwner != owner) return;
-            if (m_SpeechRoutine != null) StopCoroutine(m_SpeechRoutine);
-            m_SpeechRoutine = null;
-            m_SpeechOwner = null;
-            if (m_SpeechSource != null) m_SpeechSource.Stop();
-        }
-
-        private bool CanPlaySpeech(MutinySpeechController owner) =>
-            owner != null && owner.isActiveAndEnabled && owner.HasActiveBubble &&
-            SfxEnabled && m_SpeechSource != null && m_SpeechSource.isActiveAndEnabled;
-
-        private IEnumerator PlaySpeechSequence(MutinySpeechController owner, MutinySpeechAudio sequence)
-        {
-            yield return null;
-            for (int index = 0; index < sequence.Clips.Length; index++)
-            {
-                if (!CanPlaySpeech(owner) || !m_SfxClips.TryGetValue(sequence.Clips[index], out AudioClip clip) || clip == null) break;
-                m_SpeechSource.PlayOneShot(clip, SfxVolume);
-                double deadline = Time.realtimeSinceStartupAsDouble + clip.length /
-                    Math.Max(.01f, Mathf.Abs(m_SpeechSource.pitch)) +
-                    (index < sequence.Clips.Length - 1 ? sequence.GapSeconds : 0);
-                SfxPlayed?.Invoke(clip.name);
-                while (Time.realtimeSinceStartupAsDouble < deadline && CanPlaySpeech(owner)) yield return null;
-            }
-            m_SpeechSource.Stop();
-            m_SpeechRoutine = null;
-            m_SpeechOwner = null;
-        }
-
-        private static MutinyLevelRoot FindRobotVoiceLevel()
-        {
-            foreach (MutinyLevelController controller in FindObjectsByType<MutinyLevelController>())
-            {
-                MutinyLevelRoot root = controller.CurrentLevel;
-                if (root != null && root.gameObject.activeInHierarchy &&
-                    controller.CurrentLevelId.Equals(new MutinyLevelId(MutinyGameMode.SinglePlayer, 16)))
-                    return root;
-            }
-            return null;
         }
 
         public void PlayMusic(string musicName, bool loop = true)
@@ -267,14 +152,6 @@ namespace Mutiny.Presentation
         public void ToggleSFX()
         {
             SfxEnabled = !SfxEnabled;
-            if (!SfxEnabled)
-            {
-                CancelSpeechAudio(m_SpeechOwner);
-                if (m_RobotVoiceRoutine != null) StopCoroutine(m_RobotVoiceRoutine);
-                m_RobotVoiceRoutine = null;
-                m_RobotVoiceRequests.Clear();
-                m_RobotVoiceSource?.Stop();
-            }
             Mutiny.Persistence.MutinySaveSystem.SfxEnabled = SfxEnabled;
             Debug.Log($"[MutinyAudio] HUD-CORNER-06 SFX={(SfxEnabled ? "on" : "off")}", this);
         }

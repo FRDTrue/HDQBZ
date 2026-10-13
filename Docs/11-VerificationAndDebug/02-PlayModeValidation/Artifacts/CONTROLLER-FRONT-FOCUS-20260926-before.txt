@@ -1,4 +1,0 @@
-Unity 6000.6.0f1; controller initial support
-Actual Play Mode result: 299/301
-[FAIL] GP-NAV-02 title Play hover survives neutral frames while a player turn exists in the background
-[FAIL] GP-NAV-02 B returns to Title and Dpad restores visible Play focus with background input alive

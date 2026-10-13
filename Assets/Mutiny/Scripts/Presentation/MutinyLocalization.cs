@@ -10,10 +10,6 @@ namespace Mutiny.Presentation
     {
         public const string English = "en";
         public const string SimplifiedChinese = "zh-Hans";
-        public const string TraditionalChineseHongKong = "zh-HK";
-        // The order matches the language columns in Mutiny.tsv.
-        public static IReadOnlyList<string> SupportedCodes { get; } =
-            Array.AsReadOnly(new[] { English, SimplifiedChinese, TraditionalChineseHongKong });
         private const string RuntimeTextResource = "Localization/MutinyRuntime";
 
         private static readonly Dictionary<string, Dictionary<string, string>> RuntimeText =
@@ -21,19 +17,11 @@ namespace Mutiny.Presentation
         private static readonly HashSet<string> MissingKeys = new HashSet<string>();
         private static bool s_Started;
         private static bool s_RuntimeTextLoaded;
-        private static string s_Code = English;
+        private static string s_Code = SimplifiedChinese;
 
         public static event Action Changed;
         public static string Code => s_Code;
-        public static bool IsReady
-        {
-            get
-            {
-                foreach (string code in SupportedCodes)
-                    if (!HasRuntimeText(code)) return false;
-                return true;
-            }
-        }
+        public static bool IsReady => HasRuntimeText(English) && HasRuntimeText(SimplifiedChinese);
         public static bool UseOriginalFont => s_Code == English ||
             !HasRuntimeText(s_Code);
 
@@ -44,7 +32,7 @@ namespace Mutiny.Presentation
             MissingKeys.Clear();
             s_Started = false;
             s_RuntimeTextLoaded = false;
-            s_Code = English;
+            s_Code = SimplifiedChinese;
             Changed = null;
         }
 
@@ -55,7 +43,7 @@ namespace Mutiny.Presentation
             s_Started = true;
             EnsureRuntimeText();
             string saved = MutinySaveSystem.LanguageCode;
-            s_Code = IsSupported(saved) ? saved : English;
+            s_Code = IsSupported(saved) ? saved : SimplifiedChinese;
         }
 
         public static void Select(string code)
@@ -72,12 +60,7 @@ namespace Mutiny.Presentation
             Changed?.Invoke();
         }
 
-        private static bool IsSupported(string code)
-        {
-            foreach (string supported in SupportedCodes)
-                if (code == supported) return true;
-            return false;
-        }
+        private static bool IsSupported(string code) => code == English || code == SimplifiedChinese;
 
         private static bool HasRuntimeText(string code)
         {
@@ -108,47 +91,26 @@ namespace Mutiny.Presentation
                 return;
             }
 
-            try
-            {
-                foreach (var locale in ParseTranslations(asset.text))
-                    RuntimeText.Add(locale.Key, locale.Value);
-            }
-            catch (FormatException exception)
-            {
-                Debug.LogError("[Localization] Invalid bundled text; using English fallback. " + exception.Message);
-            }
-        }
-
-        /// <summary>Shared by runtime loading and editor table generation.</summary>
-        public static Dictionary<string, Dictionary<string, string>> ParseTranslations(string text)
-        {
-            var translations = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
-            foreach (string code in SupportedCodes)
-                translations.Add(code, new Dictionary<string, string>(StringComparer.Ordinal));
-            foreach (string rawLine in text.Split('\n'))
+            var english = new Dictionary<string, string>(StringComparer.Ordinal);
+            var chinese = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (string rawLine in asset.text.Split('\n'))
             {
                 string line = rawLine.TrimEnd('\r').TrimStart('\uFEFF');
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal)) continue;
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
+                    continue;
                 string[] fields = line.Split('\t');
-                if (fields.Length != SupportedCodes.Count + 1 || string.IsNullOrWhiteSpace(fields[0]) ||
-                    translations[English].ContainsKey(fields[0]))
-                    throw new FormatException("Invalid or duplicate translation row: " + line);
-                for (int index = 0; index < SupportedCodes.Count; index++)
+                if (fields.Length != 3 || string.IsNullOrEmpty(fields[0]) || english.ContainsKey(fields[0]))
                 {
-                    if (string.IsNullOrWhiteSpace(fields[index + 1]))
-                        throw new FormatException("Empty translation: " + fields[0] + "/" + SupportedCodes[index]);
-                    translations[SupportedCodes[index]].Add(fields[0], fields[index + 1].Replace("\\n", "\n"));
+                    Debug.LogError("[Localization] Invalid or duplicate runtime text row: " + line);
+                    english.Clear();
+                    chinese.Clear();
+                    break;
                 }
+                english.Add(fields[0], fields[1].Replace("\\n", "\n"));
+                chinese.Add(fields[0], fields[2].Replace("\\n", "\n"));
             }
-            return translations;
-        }
-
-        public static bool TryGetEnglishText(string key, out string value)
-        {
-            EnsureRuntimeText();
-            value = null;
-            return key != null && RuntimeText.TryGetValue(English, out var entries) &&
-                entries.TryGetValue(key, out value);
+            RuntimeText[English] = english;
+            RuntimeText[SimplifiedChinese] = chinese;
         }
 
         public static string Text(string key, string englishFallback, params object[] arguments)

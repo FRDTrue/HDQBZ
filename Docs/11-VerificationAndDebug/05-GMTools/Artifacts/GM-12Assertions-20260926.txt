@@ -1,4 +1,0 @@
-Initialize engine version: 6000.6.0f1 (f7f8ed4d1e24)
-[MutinyGM] Executing command: 'unlockalllevels'
-[MutinyGM] Executing command: 'unlockalllevels'
-[GM-HISTORY-BATCH] PASS 12/12

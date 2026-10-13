@@ -7,26 +7,14 @@ namespace Mutiny.Presentation
     public static class MutinyLocalizedText
     {
         private static Font s_CjkFont;
-        private static Font s_HongKongFont;
         private static readonly HashSet<string> MissingGlyphs = new HashSet<string>();
-        // Optical correction for 18 px Noto CJK text inside 24 px Pirate buttons.
+        // Optical correction for 18 px Douyin Sans CJK text inside 24 px Pirate buttons.
         private const float ChinesePirateButtonYOffset = -2f;
         public const int SpeechFontSize = 15;
-        public const int MinimumSpeechFontSize = 13;
         public static readonly Color SpeechColor = new Color32(24, 29, 35, 255);
 
-        public static string CjkFontResource(string code) => code == MutinyLocalization.TraditionalChineseHongKong
-            ? "Localization/Fonts/NotoSansCJKhk-Regular" : "Localization/Fonts/NotoSansCJKsc-Regular";
-
-        private static Font GetCjkFont(string code)
-        {
-            if (code == MutinyLocalization.TraditionalChineseHongKong)
-                return s_HongKongFont != null ? s_HongKongFont :
-                    s_HongKongFont = Resources.Load<Font>(CjkFontResource(code));
-            return s_CjkFont != null ? s_CjkFont : s_CjkFont = Resources.Load<Font>(CjkFontResource(code));
-        }
-
-        private static Font CjkFont => GetCjkFont(MutinyLocalization.Code);
+        private static Font CjkFont => s_CjkFont != null ? s_CjkFont :
+            s_CjkFont = Resources.Load<Font>("抖音美好体");
 
         public static void Pirate(Rect rect, string key, string english, bool hovered = false, bool centered = true,
             int tracking = -3)
@@ -67,18 +55,15 @@ namespace Mutiny.Presentation
             DrawCjk(rect, value, color, anchor, Mathf.Max(12, lineSpacing - 1), false);
         }
 
-        public static void Speech(Rect rect, string key, string english, string fullText = null)
+        public static void Speech(Rect rect, string key, string english)
         {
             string value = MutinyLocalization.Text(key, english);
             if (MutinyLocalization.UseOriginalFont)
             {
-                string layout = WrapEnglishSpeech(fullText ?? value, rect.width);
-                MutinyBitmapFont.DrawSpeechText(rect, layout.Substring(0, Mathf.Min(value.Length, layout.Length)),
-                    TextAnchor.UpperLeft, 0, 13);
+                MutinyBitmapFont.DrawSpeechText(rect, value, TextAnchor.UpperLeft, 0, 13);
                 return;
             }
-            int fontSize = ResolveSpeechFontSize(fullText ?? value, rect.width, rect.height);
-            DrawReadableCjk(rect, value, SpeechColor, TextAnchor.UpperLeft, fontSize);
+            DrawReadableCjk(rect, value, SpeechColor, TextAnchor.UpperLeft, SpeechFontSize);
         }
 
         public static void Tooltip(Rect rect, string value)
@@ -89,48 +74,8 @@ namespace Mutiny.Presentation
                 DrawReadableCjk(rect, value, Color.black, TextAnchor.MiddleCenter, 12);
         }
 
-        public static int ResolveSpeechFontSize(string fullText, float width, float height, string languageCode = null)
-        {
-            for (int size = SpeechFontSize; size > MinimumSpeechFontSize; size--)
-                if (CreateCjkStyle(SpeechColor, TextAnchor.UpperLeft, size, false, languageCode)
-                    .CalcHeight(new GUIContent(Normalize(fullText)), width) <= height)
-                    return size;
-            return MinimumSpeechFontSize;
-        }
-
-        // Replace spaces instead of inserting characters so reveal indices stay stable.
-        public static string WrapEnglishSpeech(string fullText, float width)
-        {
-            if (fullText != null && (fullText.Contains('|') || fullText.Contains('\n')))
-                return fullText.Replace('|', '\n');
-            char[] characters = (fullText ?? string.Empty).Replace('|', '\n')
-                .Replace('’', '\'').Replace('‘', '\'').Replace('“', '"').Replace('”', '"')
-                .Replace('—', '-').Replace('–', '-').ToCharArray();
-            int start = 0;
-            int lastSpace = -1;
-            for (int index = 0; index < characters.Length; index++)
-            {
-                if (characters[index] == '\n')
-                {
-                    start = index + 1;
-                    lastSpace = -1;
-                    continue;
-                }
-                if (characters[index] == ' ') lastSpace = index;
-                if (lastSpace >= start &&
-                    MutinyBitmapFont.MeasureDangleText(new string(characters, start, index - start + 1)) > width)
-                {
-                    characters[lastSpace] = '\n';
-                    start = lastSpace + 1;
-                    lastSpace = -1;
-                }
-            }
-            return new string(characters);
-        }
-
-        public static float MeasureSpeechHeight(string value, float width, string languageCode = null, float height = 98f) =>
-            CreateCjkStyle(SpeechColor, TextAnchor.UpperLeft,
-                ResolveSpeechFontSize(value, width, height, languageCode), false, languageCode)
+        public static float MeasureSpeechHeight(string value, float width) =>
+            CreateCjkStyle(SpeechColor, TextAnchor.UpperLeft, SpeechFontSize, false)
                 .CalcHeight(new GUIContent(Normalize(value)), width);
 
         public static Vector2 MeasureTooltipSize(string value) =>
@@ -139,11 +84,11 @@ namespace Mutiny.Presentation
         private static string Normalize(string text) =>
             (text ?? string.Empty).Replace("||", "\n\n").Replace('|', '\n');
 
-        private static GUIStyle CreateCjkStyle(Color color, TextAnchor anchor, int fontSize, bool bold, string languageCode = null)
+        private static GUIStyle CreateCjkStyle(Color color, TextAnchor anchor, int fontSize, bool bold)
         {
             var style = new GUIStyle
             {
-                font = GetCjkFont(languageCode ?? MutinyLocalization.Code),
+                font = CjkFont,
                 fontSize = fontSize,
                 fontStyle = bold ? FontStyle.Bold : FontStyle.Normal,
                 alignment = anchor,

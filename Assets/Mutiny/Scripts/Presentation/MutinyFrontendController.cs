@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using Mutiny.Levels;
+using Mutiny.Network;
 using Mutiny.Persistence;
 using Mutiny.Simulation;
 using UnityEngine;
@@ -96,6 +98,14 @@ namespace Mutiny.Presentation
         private GUIStyle m_LevelNumberStyle;
         private GUIStyle m_QuestionStyle;
 
+        // LAN lobby state. The host reuses the versus level picker; the client
+        // stays in the lobby until MatchStart arrives.
+        private bool m_NetworkHooked;
+        private bool m_OnlineHostPickingLevel;
+        private string m_LanAddressInput = "127.0.0.1";
+        private string m_LanStatusText = string.Empty;
+        private GUIStyle m_LanFieldStyle;
+
         public MutinyFrontendPage CurrentPage => m_Flow.CurrentPage;
         public Texture2D CreditsAvatar => m_CreditsAvatar;
         public int CurrentEndingFrame => m_EndingFrame;
@@ -107,30 +117,15 @@ namespace Mutiny.Presentation
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void BootstrapAfterSceneLoad()
         {
-            if (FindAnyObjectByType<MutinyFrontendController>() != null)
+            if (SceneManager.GetActiveScene().name != "Main" ||
+                FindAnyObjectByType<MutinyFrontendController>() != null)
             {
                 return;
             }
 
             MutinyLevelController levelController = FindAnyObjectByType<MutinyLevelController>();
-            Scene activeScene = SceneManager.GetActiveScene();
-            foreach (MutinyLevelController candidate in FindObjectsByType<MutinyLevelController>())
-            {
-                if (candidate.gameObject.scene == activeScene && candidate.LevelXml != null &&
-                    (activeScene.name == "Main" || candidate.StartInGameplay))
-                {
-                    levelController = candidate;
-                    break;
-                }
-            }
-            if (activeScene.name == "Main" && (levelController == null || levelController.gameObject.scene != activeScene))
-            {
-                // Clear Loaded Level also removes the editor-generated controller.
-                // A cleared Main must still have a normal menu/session entry.
-                levelController = new GameObject("MutinyGame").AddComponent<MutinyLevelController>();
-                levelController.LevelXml = Resources.Load<TextAsset>("Data/Levels/level_1_01");
-            }
-            if (levelController == null || (activeScene.name != "Main" && !levelController.StartInGameplay)) return;
+            if (levelController == null)
+                return;
 
             GameObject host = new GameObject("MutinyFrontend");
             MutinyFrontendController frontend = host.AddComponent<MutinyFrontendController>();
@@ -143,35 +138,14 @@ namespace Mutiny.Presentation
             MutinyLocalization.Initialize(this);
             LoadResources();
 
+            if (m_LevelController != null && m_LevelController.CurrentLevel != null)
+                m_LevelController.CurrentLevel.gameObject.SetActive(false);
+
             Camera mainCam = Camera.main;
             if (mainCam != null && mainCam.GetComponent<MutinyCameraController>() == null)
             {
                 mainCam.gameObject.AddComponent<MutinyCameraController>();
             }
-
-            bool isMainScene = SceneManager.GetActiveScene().name == "Main";
-            if (!isMainScene && m_LevelController != null && m_LevelController.StartInGameplay && m_LevelController.LevelXml != null)
-            {
-                // Rebuild baked editor content through the production builder. Inventories,
-                // animation caches and other runtime state are not all scene-serialized.
-                // Use the assigned authoring XML, including edits not yet copied to Resources.
-                m_LevelController.BuildLevel();
-                if (m_LevelController.CurrentLevel != null)
-                {
-                    m_Flow.EnterGameplayFromGM();
-                    MutinyAudioManager.Instance?.PlayMusic("game_music");
-                    Debug.Log($"[MutinyFrontend] Scene preview enters {m_LevelController.CurrentLevelId}", this);
-                    return;
-                }
-            }
-
-            // Build before hiding to prevent Controller.Start constructing a live
-            // battle later behind the title page. This also supports a cleared Main.
-            if (isMainScene && m_LevelController != null &&
-                m_LevelController.CurrentLevel == null && m_LevelController.LevelXml != null)
-                m_LevelController.BuildLevel();
-            if (m_LevelController != null && m_LevelController.CurrentLevel != null)
-                m_LevelController.CurrentLevel.gameObject.SetActive(false);
 
             MutinyAudioManager.Instance?.PlayMusic("menu_music");
             Debug.Log($"[MutinyFrontend] FRONT-01 title shown; highestUnlocked={MutinySaveSystem.HighestUnlockedLevel}", this);
@@ -299,6 +273,7 @@ namespace Mutiny.Presentation
 
         private void Update()
         {
+            HookNetworkIfPresent();
             if (m_Flow.CurrentPage == MutinyFrontendPage.Gameplay)
                 return;
 
@@ -391,6 +366,9 @@ namespace Mutiny.Presentation
                         break;
                     case MutinyFrontendPage.GameSelect:
                         DrawGameSelect();
+                        break;
+                    case MutinyFrontendPage.LanLobby:
+                        DrawLanLobby();
                         break;
                     case MutinyFrontendPage.LevelSelect:
                         DrawLevelSelect();
@@ -717,6 +695,15 @@ namespace Mutiny.Presentation
                     LogPage("2P-NAV-01 two player", m_Flow.CurrentPage);
                 }, showLoading: false);
             }
+            if (DrawOriginalButton(new Rect(205f, 298f, 140f, 24f), "frontend.lan_play", "lan battle", m_ButtonBack, m_ButtonBackOver))
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_LanStatusText = string.Empty;
+                    m_Flow.PressLanMultiplayer();
+                    LogPage("LAN-01 lan lobby", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
             if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "frontend.back", "back", m_ButtonBack, m_ButtonBackOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
@@ -725,6 +712,443 @@ namespace Mutiny.Presentation
                     LogPage("FRONT-02 back", m_Flow.CurrentPage);
                 }, showLoading: false);
             }
+        }
+
+        private void DrawLanLobby()
+        {
+            DrawTexture(new Rect(44f, 24f, 460f, 350f), m_GameSelectPanel);
+            MutinyLocalizedText.Pirate(new Rect(44f, 32f, 460f, 23f), "frontend.lan_play", "lan battle");
+
+            // No scene owns a MutinyNetworkManager, so the lobby spawns it here;
+            // a null manager would make the host/join buttons report "network unavailable".
+            MutinyNetworkManager manager = MutinyNetworkManager.EnsureInstance();
+            MutinyNetworkManager.SessionState state = manager != null
+                ? manager.State
+                : MutinyNetworkManager.SessionState.Idle;
+
+            if (state == MutinyNetworkManager.SessionState.Idle)
+            {
+                if (m_LanFieldStyle == null)
+                {
+                    m_LanFieldStyle = new GUIStyle(GUI.skin.textField)
+                    {
+                        alignment = TextAnchor.MiddleCenter,
+                        fontSize = 14,
+                        fontStyle = FontStyle.Bold
+                    };
+                }
+
+                // Browsing is idempotent: the lobby keeps polling the LAN while
+                // the page stays idle, and the manager stops it on state changes.
+                manager?.StartLanRoomSearch();
+                DrawLanRoomList(manager);
+
+                if (DrawOriginalButton(new Rect(63f, 220f, 200f, 24f), "frontend.lan_host", "create host", m_ButtonWide, m_ButtonWideOver))
+                {
+                    if (manager == null || !manager.StartLanHost())
+                        m_LanStatusText = manager != null ? manager.LastError : "network unavailable";
+                    else
+                        m_LanStatusText = string.Empty;
+                }
+
+                GUI.Label(new Rect(287f, 200f, 200f, 16f), MutinyLocalization.Text("frontend.ip", "host ip"));
+                m_LanAddressInput = GUI.TextField(new Rect(287f, 220f, 200f, 24f), m_LanAddressInput, 64, m_LanFieldStyle);
+                if (DrawOriginalButton(new Rect(287f, 252f, 200f, 24f), "frontend.lan_join", "join", m_ButtonWide, m_ButtonWideOver))
+                {
+                    if (manager == null || !manager.StartLanClient(m_LanAddressInput))
+                        m_LanStatusText = manager != null ? manager.LastError : "network unavailable";
+                    else
+                        m_LanStatusText = string.Empty;
+                }
+
+                DrawFirstPlayerToggle(manager, 194f);
+                DrawQuickBattleToggle(manager);
+                DrawAllowCheatsToggle(manager);
+
+                if (!string.IsNullOrEmpty(m_LanStatusText))
+                    MutinyLocalizedText.Dangle(new Rect(94f, 310f, 360f, 12f), null,
+                        m_LanStatusText, Color.white, TextAnchor.MiddleCenter, 0, 13);
+            }
+            else
+            {
+                MutinyLocalizedText.Dangle(new Rect(94f, 170f, 360f, 40f), null,
+                    LanStatusMessage(state, manager), Color.white, TextAnchor.MiddleCenter, 0, 13);
+                // While the host is still waiting for its peer the match rules can
+                // still be changed; once a match is live they are fixed for both peers.
+                if (state == MutinyNetworkManager.SessionState.Hosting)
+                {
+                    DrawFirstPlayerToggle(manager, 220f);
+                    DrawQuickBattleToggle(manager);
+                    DrawAllowCheatsToggle(manager);
+                }
+            }
+
+            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "frontend.back", "back", m_ButtonBack, m_ButtonBackOver))
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    if (MutinyNetworkManager.Exists)
+                        MutinyNetworkManager.Instance.LeaveSession();
+                    // LeaveSession early-returns while idle, so browsing is
+                    // stopped here too: the LAN should not be polled from
+                    // other pages.
+                    MutinyNetworkManager.Instance?.StopLanRoomSearch();
+                    m_LanStatusText = string.Empty;
+                    m_Flow.PressLanLobbyBack();
+                    LogPage("LAN-02 back", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
+        }
+
+        /// <summary>
+        /// Quick-battle switch. The host owns the choice; it travels inside
+        /// MatchStartMessage so both peers drop chests at the same speed while the
+        /// camera stays on the ordinary turn view.
+        /// </summary>
+        private void DrawQuickBattleToggle(MutinyNetworkManager manager)
+        {
+            bool quickBattle = manager != null && manager.QuickBattle;
+            string key = quickBattle ? "frontend.quick_battle_on" : "frontend.quick_battle_off";
+            string english = quickBattle ? "quick battle: on" : "quick battle: off";
+            if (DrawOriginalButton(new Rect(63f, 252f, 200f, 24f), key, english, m_ButtonWide, m_ButtonWideOver))
+                manager?.SetQuickBattle(!quickBattle);
+        }
+
+        /// <summary>
+        /// Room cheats rule. The host owns the choice; it travels inside
+        /// MatchStartMessage so both peers show or hide the GM menu for the whole
+        /// match alike. Real-player matches keep cheats off by default.
+        /// </summary>
+        private void DrawAllowCheatsToggle(MutinyNetworkManager manager)
+        {
+            bool allowCheats = manager != null && manager.AllowCheats;
+            string key = allowCheats ? "frontend.cheats_on" : "frontend.cheats_off";
+            string english = allowCheats ? "cheats: on" : "cheats: off";
+            if (DrawOriginalButton(new Rect(63f, 284f, 200f, 24f), key, english, m_ButtonWide, m_ButtonWideOver))
+                manager?.SetAllowCheats(!allowCheats);
+        }
+
+        /// <summary>
+        /// Opening-side rule. The host owns the choice; it travels inside
+        /// MatchStartMessage and a forced side skips the seeded coin flip, so
+        /// both peers start with the same team without consuming match RNG.
+        /// </summary>
+        private void DrawFirstPlayerToggle(MutinyNetworkManager manager, float y)
+        {
+            MutinyFirstPlayerRule rule = manager != null
+                ? manager.FirstPlayer
+                : MutinyFirstPlayerRule.Random;
+            string key = rule == MutinyFirstPlayerRule.Player1 ? "frontend.first_player_p1"
+                : rule == MutinyFirstPlayerRule.Player2 ? "frontend.first_player_p2"
+                : "frontend.first_player_random";
+            string english = rule == MutinyFirstPlayerRule.Player1 ? "first player: 1P"
+                : rule == MutinyFirstPlayerRule.Player2 ? "first player: 2P"
+                : "first player: random";
+            if (DrawOriginalButton(new Rect(63f, y, 200f, 24f), key, english, m_ButtonWide, m_ButtonWideOver))
+                manager?.SetFirstPlayer(NextFirstPlayerRule(rule));
+        }
+
+        /// <summary>Random -> 1P -> 2P -> random, the three states of the opening rule.</summary>
+        internal static MutinyFirstPlayerRule NextFirstPlayerRule(MutinyFirstPlayerRule current)
+        {
+            switch (current)
+            {
+                case MutinyFirstPlayerRule.Player1: return MutinyFirstPlayerRule.Player2;
+                case MutinyFirstPlayerRule.Player2: return MutinyFirstPlayerRule.Random;
+                default: return MutinyFirstPlayerRule.Player1;
+            }
+        }
+
+        /// <summary>Discovered LAN rooms, one per red-bordered frame row; clicking a row joins that host.</summary>
+        private void DrawLanRoomList(MutinyNetworkManager manager)
+        {
+            MutinyLocalizedText.Pirate(new Rect(63f, 60f, 300f, 16f), "frontend.lan_rooms",
+                "rooms on this network", centered: false);
+
+            List<MutinyLanDiscovery.Room> rooms = manager != null && manager.Discovery != null
+                ? manager.Discovery.GetRooms()
+                : null;
+            bool hasRooms = rooms != null && rooms.Count > 0;
+
+            // One 26px frame row per room, sliced from the same scores_rows
+            // texture the high-scores page draws its table rows from. The
+            // empty state keeps one frame visible so the room box is always
+            // recognizable while the LAN is polled.
+            const int visibleRows = 4;
+            int drawnRows = hasRooms ? Mathf.Min(rooms.Count, visibleRows) : 1;
+            for (int i = 0; i < drawnRows; i++)
+            {
+                Rect rowRect = new Rect(63f, 80f + i * 28f, 424f, 26f);
+                if (m_ScoresRows != null)
+                {
+                    float vMin = 1f - (float)((i + 1) * 26) / 261f;
+                    float vHeight = 26f / 261f;
+                    GUI.DrawTextureWithTexCoords(rowRect, m_ScoresRows,
+                        new Rect(0f, vMin, 1f, vHeight), true);
+                }
+
+                if (!hasRooms)
+                {
+                    if (i == 0)
+                        MutinyLocalizedText.Pirate(rowRect, "frontend.lan_no_rooms",
+                            "searching for rooms...");
+                    continue;
+                }
+
+                MutinyLanDiscovery.Room room = rooms[i];
+                bool hovered = !MutinyTransitionManager.IsTransitionActive &&
+                               rowRect.Contains(GetCanvasMousePosition());
+                if (hovered)
+                    MutinyCursorManager.NotifyHoverInteractable();
+                MutinyLocalizedText.Pirate(rowRect, null, room.Address, hovered);
+
+                bool clicked = !MutinyTransitionManager.IsTransitionActive &&
+                               MutinyControllerUI.Button(rowRect, GUIContent.none, GUIStyle.none,
+                                   "button:room:" + room.Address);
+                if (clicked)
+                {
+                    Debug.Log($"[MutinyFrontend] LAN-07 join discovered room {room.Address}:{room.Port}", this);
+                    m_LanAddressInput = room.Address;
+                    if (manager == null || !manager.StartLanClient(room.Address))
+                        m_LanStatusText = manager != null ? manager.LastError : "network unavailable";
+                    else
+                        m_LanStatusText = string.Empty;
+                }
+            }
+        }
+
+        private static string LanStatusMessage(MutinyNetworkManager.SessionState state, MutinyNetworkManager manager)
+        {
+            switch (state)
+            {
+                case MutinyNetworkManager.SessionState.Hosting:
+                    return MutinyLocalization.Text("frontend.lan_waiting", "waiting for a player...") +
+                           $"\n{GetLocalLanAddress()}:{MutinyNetworkManager.DefaultPort}";
+                case MutinyNetworkManager.SessionState.Connecting:
+                    return MutinyLocalization.Text("frontend.connecting", "connecting...") +
+                           $"\n{(manager != null ? manager.networkAddress : string.Empty)}";
+                case MutinyNetworkManager.SessionState.Connected:
+                    return manager != null && manager.IsHost
+                        ? MutinyLocalization.Text("frontend.lan_host_ready", "player joined! pick a level")
+                        : MutinyLocalization.Text("frontend.lan_client_ready", "connected! waiting for the host...");
+                case MutinyNetworkManager.SessionState.InMatch:
+                    return MutinyLocalization.Text("frontend.lan_in_match", "match in progress");
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private static string GetLocalLanAddress()
+        {
+            // Dns.GetHostEntry lists virtual adapters first on many dev machines
+            // (VMware/Hyper-V/WSL), whose addresses peers cannot reach. Prefer an
+            // interface that owns a default gateway, then any usable IPv4.
+            try
+            {
+                string anyCandidate = null;
+                foreach (System.Net.NetworkInformation.NetworkInterface nic in
+                         System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up ||
+                        nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback ||
+                        nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Tunnel)
+                        continue;
+
+                    foreach (System.Net.NetworkInformation.UnicastIPAddressInformation info in
+                             nic.GetIPProperties().UnicastAddresses)
+                    {
+                        if (info.Address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork ||
+                            System.Net.IPAddress.IsLoopback(info.Address))
+                            continue;
+                        if (nic.GetIPProperties().GatewayAddresses != null &&
+                            nic.GetIPProperties().GatewayAddresses.Count > 0)
+                            return info.Address.ToString();
+                        anyCandidate ??= info.Address.ToString();
+                    }
+                }
+                if (anyCandidate != null)
+                    return anyCandidate;
+            }
+            catch (Exception)
+            {
+                // Interface enumeration can fail on locked-down machines; fall
+                // through to the loopback hint.
+            }
+            return "127.0.0.1";
+        }
+
+        private void HookNetworkIfPresent()
+        {
+            if (m_NetworkHooked || !MutinyNetworkManager.Exists)
+                return;
+            MutinyNetworkManager manager = MutinyNetworkManager.Instance;
+            manager.OnStateChanged += OnNetworkStateChanged;
+            manager.OnMatchStartReceived += OnMatchStartReceived;
+            manager.OnSessionEnded += OnNetworkSessionEnded;
+            manager.OnMatchControlRequested += OnMatchControlRequested;
+            manager.OnLobbyReturn += OnLobbyReturnReceived;
+            m_NetworkHooked = true;
+        }
+
+        private void UnhookNetwork()
+        {
+            if (!m_NetworkHooked)
+                return;
+            if (MutinyNetworkManager.Exists)
+            {
+                MutinyNetworkManager manager = MutinyNetworkManager.Instance;
+                manager.OnStateChanged -= OnNetworkStateChanged;
+                manager.OnMatchStartReceived -= OnMatchStartReceived;
+                manager.OnSessionEnded -= OnNetworkSessionEnded;
+                manager.OnMatchControlRequested -= OnMatchControlRequested;
+                manager.OnLobbyReturn -= OnLobbyReturnReceived;
+            }
+            m_NetworkHooked = false;
+        }
+
+        private void OnDestroy() => UnhookNetwork();
+
+        private void OnNetworkStateChanged(MutinyNetworkManager.SessionState state)
+        {
+            if (state == MutinyNetworkManager.SessionState.Connected)
+            {
+                MutinyNetworkManager manager = MutinyNetworkManager.Instance;
+                if (manager.IsHost && m_Flow.CurrentPage == MutinyFrontendPage.LanLobby &&
+                    !m_OnlineHostPickingLevel)
+                {
+                    m_OnlineHostPickingLevel = true;
+                    if (m_LevelController == null)
+                        m_LevelController = FindAnyObjectByType<MutinyLevelController>();
+                    m_LevelController?.ConfigureSession(MutinyGameMode.OnlineTwoPlayer, resetVersusWins: true);
+                    m_TwoPlayerLoadError = null;
+                    m_Flow.EnterOnlineLevelSelect();
+                    LogPage("LAN-03 host level select", m_Flow.CurrentPage);
+                }
+            }
+            else if (state == MutinyNetworkManager.SessionState.Idle)
+            {
+                m_OnlineHostPickingLevel = false;
+            }
+        }
+
+        private void OnMatchStartReceived(int levelIndex, int matchSeed)
+        {
+            if (StartLevel(levelIndex, MutinyGameMode.OnlineTwoPlayer))
+            {
+                m_Flow.EnterOnlineGameplay();
+                if (MutinyNetworkManager.Exists)
+                    MutinyNetworkManager.Instance.NotifyMatchActive();
+                LogPage($"LAN-04 match start level={levelIndex:D2} seed={matchSeed}", m_Flow.CurrentPage);
+            }
+            else
+            {
+                if (MutinyNetworkManager.Exists)
+                    MutinyNetworkManager.Instance.LeaveSession();
+                m_LanStatusText = MutinyLocalization.Text("frontend.level_load_failed", "level failed to load");
+            }
+        }
+
+        private void OnNetworkSessionEnded(string reason)
+        {
+            m_OnlineHostPickingLevel = false;
+            Debug.Log($"[MutinyFrontend] LAN-05 session ended: {reason}", this);
+            m_LanStatusText = MutinyLocalization.Text("frontend.disconnected", "disconnected");
+            if (m_Flow.CurrentPage == MutinyFrontendPage.Gameplay)
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    if (m_LevelController == null)
+                        m_LevelController = FindAnyObjectByType<MutinyLevelController>();
+                    m_LevelController?.ClearLevel();
+                    m_Flow.ForceReturnToTitle();
+                    MutinyAudioManager.Instance?.PlayMusic("menu_music");
+                    LogPage("LAN-06 disconnect to title", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
+        }
+
+        /// <summary>HUD quit corner during an online match: leave and go to title.</summary>
+        public void QuitOnlineMatchToTitle()
+        {
+            if (MutinyNetworkManager.Exists)
+                MutinyNetworkManager.Instance.LeaveSession();
+            m_LevelController?.ClearLevel();
+            m_Flow.ForceReturnToTitle();
+            MutinyAudioManager.Instance?.PlayMusic("menu_music");
+        }
+
+        /// <summary>
+        /// End-of-match "restart level" during an online match: the host re-seeds
+        /// the same level on both peers; the client asks the host to do it. The
+        /// local board is rebuilt by the MatchStart that follows, never directly.
+        /// </summary>
+        public void RequestOnlineRestart()
+        {
+            MutinyNetworkManager manager = MutinyNetworkManager.Instance;
+            if (manager == null || !MutinyNetworkManager.IsOnlineMatch)
+                return;
+            if (m_LevelController == null)
+                m_LevelController = FindAnyObjectByType<MutinyLevelController>();
+            if (manager.IsHost)
+            {
+                if (m_LevelController != null)
+                    manager.HostStartMatch(m_LevelController.CurrentLevelIndex);
+            }
+            else
+            {
+                manager.SendMatchControlRequest(MutinyMatchControlAction.RestartLevel);
+            }
+            Debug.Log("[MutinyFrontend] LAN-08 online restart requested", this);
+        }
+
+        /// <summary>
+        /// End-of-match "back to menu" during an online match: the host re-opens
+        /// the versus picker, the client waits in the lobby, and the session stays
+        /// connected for the next MatchStart.
+        /// </summary>
+        public void OnlineBackToLevelSelect()
+        {
+            if (!MutinyNetworkManager.IsOnlineMatch)
+                return;
+            ApplyOnlineLobbyReturn();
+            MutinyNetworkManager.Instance?.ReturnToLobby();
+        }
+
+        // The local half of the lobby return; the peer is notified by the caller
+        // so a received LobbyReturn never echoes back over the wire.
+        private void ApplyOnlineLobbyReturn()
+        {
+            MutinyNetworkManager manager = MutinyNetworkManager.Instance;
+            bool host = manager != null && manager.IsHost;
+            if (m_LevelController == null)
+                m_LevelController = FindAnyObjectByType<MutinyLevelController>();
+            m_LevelController?.ClearLevel();
+            if (host)
+            {
+                m_OnlineHostPickingLevel = true;
+                m_Flow.ReturnToOnlineLevelSelect();
+            }
+            else
+            {
+                m_Flow.ReturnToLanLobby();
+            }
+            MutinyAudioManager.Instance?.PlayMusic("menu_music");
+            LogPage("LAN-07 online match back to lobby", m_Flow.CurrentPage);
+        }
+
+        // Host: the remote player pressed an end-of-match popup button.
+        private void OnMatchControlRequested(MutinyMatchControlAction action)
+        {
+            if (action == MutinyMatchControlAction.RestartLevel)
+                RequestOnlineRestart();
+            else if (action == MutinyMatchControlAction.BackToLevelSelect)
+                OnlineBackToLevelSelect();
+        }
+
+        // Client: the host left the finished match for the level picker.
+        private void OnLobbyReturnReceived()
+        {
+            ApplyOnlineLobbyReturn();
         }
 
         private void DrawLevelSelect()
@@ -762,15 +1186,15 @@ namespace Mutiny.Presentation
             // Draw only the map into the frame interior so neither placeholder
             // nor white map pixels cover the red border and name strip.
             DrawTexture(new Rect(174f, 125f, 202f, 152f), m_TwoPlayerPreviewFrame);
-            DrawTwoPlayerMapPreview(m_TwoPlayerPreviews[level - 1]);
+            DrawTwoPlayerMapPreview(m_TwoPlayerPreviews[level - 16]);
             MutinyBitmapFont.DrawDangleText(new Rect(175f, 260f, 200f, 16f),
-                TwoPlayerLevelNames[level - 1], Color.white, TextAnchor.MiddleCenter, 0, 13);
-            if (level > 1 && DrawTwoPlayerArrow(new Rect(117.5f, 182f, 35f, 38f), m_TwoPlayerPrevUp, m_TwoPlayerPrevOver))
+                TwoPlayerLevelNames[level - 16], Color.white, TextAnchor.MiddleCenter, 0, 13);
+            if (level > 16 && DrawTwoPlayerArrow(new Rect(117.5f, 182f, 35f, 38f), m_TwoPlayerPrevUp, m_TwoPlayerPrevOver))
             {
                 m_Flow.StepTwoPlayerLevel(-1);
                 m_TwoPlayerLoadError = null;
             }
-            if (level < MutinyLevelId.OriginalTwoPlayerCount && DrawTwoPlayerArrow(new Rect(394.5f, 182f, 35f, 38f), m_TwoPlayerNextUp, m_TwoPlayerNextOver))
+            if (level < 33 && DrawTwoPlayerArrow(new Rect(394.5f, 182f, 35f, 38f), m_TwoPlayerNextUp, m_TwoPlayerNextOver))
             {
                 m_Flow.StepTwoPlayerLevel(1);
                 m_TwoPlayerLoadError = null;
@@ -787,15 +1211,22 @@ namespace Mutiny.Presentation
                 p2.ToString(), Color.white, TextAnchor.MiddleCenter, 0, 13);
             if (DrawOriginalButton(new Rect(205f, 296f, 140f, 24f), "frontend.play", "play", m_ButtonBack, m_ButtonBackOver))
             {
-                if (!MutinyLevelController.HasLevelData(new MutinyLevelId(MutinyGameMode.LocalTwoPlayer, level)))
+                if (!MutinyLevelController.HasNumberedLevelData(level))
                     m_TwoPlayerLoadError = "frontend.level_unavailable";
                 else
                 {
                     MutinyTransitionManager.RequestTransition(() =>
                     {
+                        if (m_OnlineHostPickingLevel)
+                        {
+                            // MatchStart drives StartLevel on both peers, so the
+                            // host only publishes the level choice here.
+                            if (MutinyNetworkManager.Exists)
+                                MutinyNetworkManager.Instance.HostStartMatch(level);
+                            return;
+                        }
                         if (StartLevel(level, MutinyGameMode.LocalTwoPlayer))
-                            m_Flow.TrySelectTwoPlayerLevel(number => MutinyLevelController.HasLevelData(
-                                new MutinyLevelId(MutinyGameMode.LocalTwoPlayer, number)));
+                            m_Flow.TrySelectTwoPlayerLevel(MutinyLevelController.HasNumberedLevelData);
                         else
                             m_TwoPlayerLoadError = "frontend.level_load_failed";
                     }, showLoading: true);
@@ -898,7 +1329,7 @@ namespace Mutiny.Presentation
                     float reveal = MutinyEndingSequence.DialogueRevealAtFrame(m_EndingFrame, dialogueIndex);
                     int visibleCharacters = Mathf.Min(text.Length, Mathf.CeilToInt(text.Length * reveal));
                     MutinyLocalizedText.Speech(MutinyGameHUD.ResolveSpeechTextRect(dialogue.Bubble),
-                        null, text.Substring(0, visibleCharacters), text);
+                        null, text.Substring(0, visibleCharacters));
                 }
                 else
                 {
@@ -1057,36 +1488,14 @@ namespace Mutiny.Presentation
 
             // LevelSelectButton.doPress clears `_root.score` before entering a
             // new one-player game.  Advancing inside an active game does not.
-            if (!m_LevelController.TryLoadLevel(new MutinyLevelId(mode, level)))
-                return false;
+            m_LevelController.ConfigureSession(mode);
             if (mode == MutinyGameMode.SinglePlayer)
                 m_LevelController.ResetSinglePlayerScore();
+            if (!m_LevelController.TryLoadLevel(level))
+                return false;
             if (m_LevelController.CurrentLevel != null)
                 m_LevelController.CurrentLevel.gameObject.SetActive(true);
             MutinyAudioManager.Instance?.PlayMusic("game_music");
-            return true;
-        }
-
-        // GM bypasses menu limits and unlocks, but uses the same world, camera and audio entry.
-        public bool TryEnterLevelFromGM(MutinyLevelId id, out string error)
-        {
-            error = null;
-            if (MutinyTransitionManager.IsTransitionActive)
-            {
-                error = "Wait for the current transition to finish.";
-                return false;
-            }
-            if (!MutinyLevelController.HasLevelData(id))
-            {
-                error = $"Level resource not found: {id.AssetName}.xml";
-                return false;
-            }
-            if (!StartLevel(id.Number, id.Mode))
-            {
-                error = $"Could not enter {id.AssetName}.";
-                return false;
-            }
-            m_Flow.EnterGameplayFromGM();
             return true;
         }
 

@@ -6,6 +6,7 @@ namespace Mutiny.Presentation
     {
         Title,
         GameSelect,
+        LanLobby,
         LevelSelect,
         TwoPlayerLevelSelect,
         Help,
@@ -22,7 +23,10 @@ namespace Mutiny.Presentation
     public sealed class MutinyFrontendFlow
     {
         public MutinyFrontendPage CurrentPage { get; private set; } = MutinyFrontendPage.Title;
-        public int SelectedTwoPlayerLevel { get; private set; } = 1;
+        public int SelectedTwoPlayerLevel { get; private set; } = 16;
+        // The versus picker serves both the local two-player route and the LAN
+        // host, which reaches it while still waiting for its own MatchStart.
+        private bool m_OnlineLevelSelect;
 
         public void PressPlay()
         {
@@ -84,10 +88,81 @@ namespace Mutiny.Presentation
                 CurrentPage = MutinyFrontendPage.TwoPlayerLevelSelect;
         }
 
+        public void PressLanMultiplayer()
+        {
+            if (CurrentPage == MutinyFrontendPage.GameSelect)
+                CurrentPage = MutinyFrontendPage.LanLobby;
+        }
+
+        public void PressLanLobbyBack()
+        {
+            if (CurrentPage == MutinyFrontendPage.LanLobby)
+                CurrentPage = MutinyFrontendPage.GameSelect;
+        }
+
+        /// <summary>Host moved from the LAN lobby into the versus level picker.</summary>
+        public bool EnterOnlineLevelSelect()
+        {
+            if (CurrentPage != MutinyFrontendPage.LanLobby)
+                return false;
+            m_OnlineLevelSelect = true;
+            CurrentPage = MutinyFrontendPage.TwoPlayerLevelSelect;
+            return true;
+        }
+
+        /// <summary>A MatchStart message (or host pick) moved the lobby into gameplay.</summary>
+        public bool EnterOnlineGameplay()
+        {
+            // The client waits in the lobby for the host's choice, so its
+            // MatchStart lands on LanLobby. The host picks the level itself and
+            // is already in the versus picker when its own MatchStart arrives;
+            // without that route the host would stay on the menu page while the
+            // match runs underneath.
+            if (CurrentPage != MutinyFrontendPage.LanLobby &&
+                !(m_OnlineLevelSelect && CurrentPage == MutinyFrontendPage.TwoPlayerLevelSelect))
+                return false;
+            m_OnlineLevelSelect = false;
+            CurrentPage = MutinyFrontendPage.Gameplay;
+            return true;
+        }
+
+        /// <summary>
+        /// Online match ended: the host re-opens the versus picker to choose the
+        /// next level. The online route stays armed so the following MatchStart
+        /// can leave the picker again.
+        /// </summary>
+        public bool ReturnToOnlineLevelSelect()
+        {
+            if (CurrentPage != MutinyFrontendPage.Gameplay)
+                return false;
+            m_OnlineLevelSelect = true;
+            CurrentPage = MutinyFrontendPage.TwoPlayerLevelSelect;
+            return true;
+        }
+
+        /// <summary>Online match ended: the client waits in the lobby for the host's next pick.</summary>
+        public bool ReturnToLanLobby()
+        {
+            if (CurrentPage != MutinyFrontendPage.Gameplay)
+                return false;
+            CurrentPage = MutinyFrontendPage.LanLobby;
+            return true;
+        }
+
+        /// <summary>Disconnects and explicit online quits land on the title page.</summary>
+        public void ForceReturnToTitle()
+        {
+            m_OnlineLevelSelect = false;
+            CurrentPage = MutinyFrontendPage.Title;
+        }
+
         public void PressTwoPlayerLevelSelectBack()
         {
             if (CurrentPage == MutinyFrontendPage.TwoPlayerLevelSelect)
+            {
+                m_OnlineLevelSelect = false;
                 CurrentPage = MutinyFrontendPage.GameSelect;
+            }
         }
 
         public bool StepTwoPlayerLevel(int delta)
@@ -96,7 +171,7 @@ namespace Mutiny.Presentation
                 (delta != -1 && delta != 1))
                 return false;
             int next = SelectedTwoPlayerLevel + delta;
-            if (next < 1 || next > Mutiny.Levels.MutinyLevelId.OriginalTwoPlayerCount)
+            if (next < 16 || next > 33)
                 return false;
             SelectedTwoPlayerLevel = next;
             return true;
@@ -117,11 +192,6 @@ namespace Mutiny.Presentation
                 return false;
             CurrentPage = MutinyFrontendPage.TwoPlayerLevelSelect;
             return true;
-        }
-
-        public void EnterGameplayFromGM()
-        {
-            CurrentPage = MutinyFrontendPage.Gameplay;
         }
 
         public void PressLevelSelectBack()

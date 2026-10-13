@@ -13,11 +13,6 @@ namespace Mutiny.Simulation
         public float VelocityY;
 
         public float Weight; // default 1.0f
-        // A missing field in legacy serialized states is zero and resolves to 1.
-        // Store the world multiplier separately so weapon-specific Weight remains intact.
-        public float GravityScale;
-        public float EffectiveGravityScale => GravityScale > 0f ? GravityScale : 1f;
-        public float GravityPerTick => Weight * EffectiveGravityScale;
         public float Bounce; // default 0.2f
         public float Friction; // default 0.3f (2.0f for Character)
 
@@ -40,7 +35,6 @@ namespace Mutiny.Simulation
                 VelocityX = 0f,
                 VelocityY = 0f,
                 Weight = 1.0f,
-                GravityScale = 1f,
                 Bounce = 0.2f,
                 Friction = 0.3f,
                 LeftExtent = 6f,
@@ -57,22 +51,12 @@ namespace Mutiny.Simulation
     {
         public readonly MutinyPhysicsBody Body;
         public readonly PhysicsBodyState State;
-        private readonly bool m_DataOnly;
-        public bool IsValid => m_DataOnly || Body != null;
 
         public PhysicsBoxObstacle(MutinyPhysicsBody body, PhysicsBodyState state)
         {
             Body = body;
             State = state;
-            m_DataOnly = false;
         }
-
-        private PhysicsBoxObstacle(PhysicsBodyState state)
-        { Body = null; State = state; m_DataOnly = true; }
-
-        // Value-only obstacles let the enhanced world reuse authoritative Solid
-        // collision without creating scene objects or retaining Unity references.
-        internal static PhysicsBoxObstacle FromSnapshot(PhysicsBodyState state) => new PhysicsBoxObstacle(state);
     }
 
     /// <summary>
@@ -171,7 +155,7 @@ namespace Mutiny.Simulation
         private static void AddBoxWeaponTargets<T>(HashSet<GameObject> targets)
             where T : Component
         {
-            T[] instances = UnityEngine.Object.FindObjectsByType<T>(FindObjectsInactive.Include);
+            T[] instances = UnityEngine.Object.FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             for (int i = 0; i < instances.Length; i++)
             {
                 if (instances[i] != null)
@@ -242,7 +226,7 @@ namespace Mutiny.Simulation
         {
             var result = new StepResult();
 
-            body.VelocityY += body.GravityPerTick;
+            body.VelocityY += body.Weight;
 
             if (body.VelocityX == 0f && body.VelocityY == 0f)
             {
@@ -311,7 +295,7 @@ namespace Mutiny.Simulation
                     for (int i = 0; i < boxes.Count; i++)
                     {
                         PhysicsBoxObstacle obstacle = boxes[i];
-                        if (!obstacle.IsValid || (self != null && obstacle.Body == self))
+                        if (obstacle.Body == null || obstacle.Body == self)
                             continue;
                         PhysicsBodyState box = obstacle.State;
                         if (box.X - box.LeftExtent > body.X + body.RightExtent ||
@@ -435,7 +419,7 @@ namespace Mutiny.Simulation
                     for (int i = 0; i < boxes.Count; i++)
                     {
                         PhysicsBoxObstacle obstacle = boxes[i];
-                        if (!obstacle.IsValid || (self != null && obstacle.Body == self))
+                        if (obstacle.Body == null || obstacle.Body == self)
                             continue;
                         PhysicsBodyState box = obstacle.State;
                         if (box.Y - box.TopExtent > body.Y + body.BottomExtent ||

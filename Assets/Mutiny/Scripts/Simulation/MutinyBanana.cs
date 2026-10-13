@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Mutiny.Diagnostics;
 using Mutiny.Levels;
 using Mutiny.Presentation;
@@ -134,9 +133,10 @@ namespace Mutiny.Simulation
             {
                 if (IsAiOwner())
                 {
-                    float nearestDistanceSquared = FindOriginalNearestCharacterDistanceSquared(
-                        state, Object.FindObjectsByType<MutinyCharacter>());
-                    if (ShouldDetonateForAi(nearestDistanceSquared, m_LastNearestDistanceSquared))
+                    float nearestDistanceSquared = FindOriginalNearestCharacterDistanceSquared(state);
+                    if ((nearestDistanceSquared > m_LastNearestDistanceSquared &&
+                         nearestDistanceSquared < AiRecedingDetonationLimitSquared) ||
+                        nearestDistanceSquared < AiImmediateDetonationDistanceSquared)
                     {
                         shouldExplode = true;
                         reason = nearestDistanceSquared < AiImmediateDetonationDistanceSquared
@@ -175,7 +175,7 @@ namespace Mutiny.Simulation
             if (Owner == null)
                 return false;
 
-            MutinyTeam[] teams = Object.FindObjectsByType<MutinyTeam>();
+            MutinyTeam[] teams = Object.FindObjectsByType<MutinyTeam>(FindObjectsSortMode.None);
             for (int i = 0; i < teams.Length; i++)
             {
                 if (teams[i] != null && teams[i].Characters.Contains(Owner))
@@ -184,19 +184,11 @@ namespace Mutiny.Simulation
             return false;
         }
 
-        internal static bool ShouldDetonateForAi(float nearestDistanceSquared, float lastDistanceSquared) =>
-            (nearestDistanceSquared > lastDistanceSquared && nearestDistanceSquared < AiRecedingDetonationLimitSquared) ||
-            nearestDistanceSquared < AiImmediateDetonationDistanceSquared;
-
-        // Shared by real detonation and AI prediction; intentionally no alive,
-        // enemy-only or owner filter. Banana.as checks all Team.characters.
-        internal static float FindOriginalNearestCharacterDistanceSquared(
-            PhysicsBodyState bananaState, IReadOnlyList<MutinyCharacter> characters)
+        private static float FindOriginalNearestCharacterDistanceSquared(PhysicsBodyState bananaState)
         {
             float nearest = float.PositiveInfinity;
-            if (characters == null)
-                return nearest;
-            for (int i = 0; i < characters.Count; i++)
+            MutinyCharacter[] characters = Object.FindObjectsByType<MutinyCharacter>(FindObjectsSortMode.None);
+            for (int i = 0; i < characters.Length; i++)
             {
                 MutinyCharacter character = characters[i];
                 if (character == null || character.PhysicsBody == null)
@@ -217,7 +209,7 @@ namespace Mutiny.Simulation
             if (inputTeam == null || inputTeam.IsAiControlled)
                 return null;
 
-            MutinyBanana[] bananas = Object.FindObjectsByType<MutinyBanana>();
+            MutinyBanana[] bananas = Object.FindObjectsByType<MutinyBanana>(FindObjectsSortMode.None);
             for (int i = 0; i < bananas.Length; i++)
             {
                 MutinyBanana banana = bananas[i];

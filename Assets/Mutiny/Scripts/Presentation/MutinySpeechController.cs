@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Mutiny.Levels;
 using Mutiny.Simulation;
 using UnityEngine;
 
@@ -55,12 +54,10 @@ namespace Mutiny.Presentation
         public bool IsPlayingEndingLine => m_Active && m_EndingLine;
         public Vector3 BubbleWorldPosition => m_BubbleWorldPosition;
         public string VisibleText => m_Active ? m_Line.Substring(0, m_RevealedCharacters) : string.Empty;
-        public string FullText => m_Active ? m_Line : string.Empty;
         public MutinyCharacter Speaker { get; private set; }
 
         public void Initialize(MutinyTurnManager turnManager)
         {
-            CancelConfiguredAudio();
             MutinyLocalization.Changed -= RefreshLanguage;
             MutinyLocalization.Changed += RefreshLanguage;
             if (m_TurnManager != null)
@@ -75,7 +72,6 @@ namespace Mutiny.Presentation
 
         private void OnDestroy()
         {
-            CancelConfiguredAudio();
             MutinyLocalization.Changed -= RefreshLanguage;
             if (m_TurnManager != null)
                 m_TurnManager.OnGameOver -= HandleGameOver;
@@ -127,10 +123,9 @@ namespace Mutiny.Presentation
 
         private void StartLine(int lineIndex, MutinyTeam team)
         {
-            CancelConfiguredAudio();
             Speaker = ChooseSpeaker(team);
             string type = GetTeamType(m_TurnManager.Team2);
-            if (Speaker == null || type == null || !TryResolveEnglishLine(type, lineIndex, out string englishLine))
+            if (Speaker == null || type == null || !Lines.TryGetValue(type, out string[] sequence))
             {
                 m_Active = false;
                 m_EndingLine = false;
@@ -140,7 +135,7 @@ namespace Mutiny.Presentation
 
             m_LineIndex = lineIndex;
             m_LineKey = LineKey(type, lineIndex);
-            m_EnglishLine = englishLine;
+            m_EnglishLine = sequence[lineIndex];
             m_Line = MutinyLocalization.Text(m_LineKey, m_EnglishLine);
             m_Active = true;
             m_EndingLine = lineIndex >= 2;
@@ -153,42 +148,12 @@ namespace Mutiny.Presentation
             // SpeechBubble.setTarget plays the first character's team type once,
             // when the line is assigned (before the bubble's ten-frame reveal).
             string voiceType = GetTeamType(team);
-            MutinyLevelRoot root = GetComponent<MutinyLevelRoot>();
-            MutinySpeechAudio configured = root?.SpeechAudio.Find(audio => audio.Line == lineIndex);
-            if (configured != null)
-            {
-                MutinyAudioManager.Instance.PlaySpeechAudio(this, configured);
-                return;
-            }
             if (voiceType != null)
                 MutinyAudioManager.Instance?.PlaySFX(voiceType);
         }
 
         public static string LineKey(string opponentType, int lineIndex) =>
-            "speech." + NormalizeOpponentType(opponentType) + "." + lineIndex;
-
-        private static string NormalizeOpponentType(string type) =>
-            string.Equals(type, "robot", StringComparison.OrdinalIgnoreCase) ? "robot" : type;
-
-        // Original teams retain their source fallback. Extensions use the CSV's
-        // English column, and must provide all four lines to join the conversation.
-        public static bool TryResolveEnglishLine(string opponentType, int lineIndex, out string english)
-        {
-            english = null;
-            if (string.IsNullOrEmpty(opponentType) || lineIndex < 0 || lineIndex >= 4) return false;
-            string type = NormalizeOpponentType(opponentType);
-            if (Lines.TryGetValue(type, out string[] sequence))
-            {
-                english = sequence[lineIndex];
-                return true;
-            }
-            for (int index = 0; index < 4; index++)
-            {
-                if (!MutinyLocalization.TryGetEnglishText(LineKey(type, index), out string value)) return false;
-                if (index == lineIndex) english = value;
-            }
-            return true;
-        }
+            "speech." + opponentType + "." + lineIndex;
 
         private void RefreshLanguage()
         {
@@ -224,7 +189,6 @@ namespace Mutiny.Presentation
                 return;
             }
             m_Active = false;
-            CancelConfiguredAudio();
             m_EndingLine = false;
             Speaker = null;
         }
@@ -244,18 +208,7 @@ namespace Mutiny.Presentation
             {
                 // Same effect as Flash's Infinity: finish on the next tick.
                 m_CompleteTicks = CompleteDelayTicks;
-                CancelConfiguredAudio();
             }
-        }
-
-        private void OnDisable() => CancelConfiguredAudio();
-
-        private void CancelConfiguredAudio()
-        {
-            // Do not create a persistent audio manager while an edit-mode preview
-            // is being destroyed or during application shutdown.
-            if (!Application.isPlaying) return;
-            FindAnyObjectByType<MutinyAudioManager>()?.CancelSpeechAudio(this);
         }
 
         public static MutinyCharacter ChooseSpeaker(MutinyTeam team)

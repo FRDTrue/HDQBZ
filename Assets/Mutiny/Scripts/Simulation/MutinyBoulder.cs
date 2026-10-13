@@ -185,7 +185,7 @@ namespace Mutiny.Simulation
         private void ApplyCharacterContacts(PhysicsBodyState boulderState)
         {
             // Boulder.as iterates Controller.teams, not arbitrary scene objects.
-            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
+            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>(FindObjectsSortMode.None);
             for (int teamIndex = 0; teamIndex < teams.Length; teamIndex++)
             {
                 List<MutinyCharacter> characters = teams[teamIndex].Characters;

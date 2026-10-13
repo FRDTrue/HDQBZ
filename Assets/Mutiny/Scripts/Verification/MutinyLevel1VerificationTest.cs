@@ -35,7 +35,7 @@ namespace Mutiny.Verification
 
     public static class MutinyLevel1VerificationTest
     {
-        public static MutinyLevel1VerificationResult RunAllTests(string level01XmlPath = "Assets/Mutiny/Data/Levels/level_1_01.xml")
+        public static MutinyLevel1VerificationResult RunAllTests(string level01XmlPath = "Assets/Mutiny/Data/Levels/level_01.xml")
         {
             var res = new MutinyLevel1VerificationResult();
 
@@ -56,7 +56,7 @@ namespace Mutiny.Verification
             res.Assert(xml != null, "Level 1 XML exists and can be loaded");
             if (xml == null) return res;
 
-            MutinyLevelData levelData = MutinyLevelXmlParser.Parse(xml, "level_1_01.xml");
+            MutinyLevelData levelData = MutinyLevelXmlParser.Parse(xml, "level_01.xml");
             res.Assert(levelData.Width == 50, "Level 1 Width == 50");
             res.Assert(levelData.Height == 17, "Level 1 Height == 17");
             res.Assert(levelData.Players == 1, "Level 1 Players == 1 (Single Player)");

@@ -24,6 +24,7 @@ namespace Mutiny.Verification.Editor
         private const string PiecesOfEightPresentationVerificationKey = "Mutiny.PiecesOfEightPresentationPlayModeVerification";
         private const string AimCancelTouchVerificationKey = "Mutiny.AimCancelTouchPlayModeVerification";
         private const string CharacterAimOverlayVerificationKey = "Mutiny.CharacterAimOverlayPlayModeVerification";
+        private const string MobileGesturesVerificationKey = "Mutiny.MobileGesturesPlayModeVerification";
 
         static MutinyParityValidationMenu()
         {
@@ -51,9 +52,10 @@ namespace Mutiny.Verification.Editor
             bool verifyPiecesOfEightPresentation = SessionState.GetBool(PiecesOfEightPresentationVerificationKey, false);
             bool verifyAimCancelTouch = SessionState.GetBool(AimCancelTouchVerificationKey, false);
             bool verifyCharacterAimOverlay = SessionState.GetBool(CharacterAimOverlayVerificationKey, false);
+            bool verifyMobileGestures = SessionState.GetBool(MobileGesturesVerificationKey, false);
             if (!verifyExplosionCamera && !verifyAiBoxCamera && !verifyCannonPresentation && !verifyAirDropPresentation && !verifyBottomNotices && !verifySeagullPresentation && !verifyCamera && !verifyCameraInitialization && !verifyCannon && !verifyWeaponLifecycle && !verifyScrollArrow &&
                 !verifyLevelLifecycle && !verifyAnchorAnimation && !verifyPiecesOfEightPresentation &&
-                !verifyAimCancelTouch && !verifyCharacterAimOverlay)
+                !verifyAimCancelTouch && !verifyCharacterAimOverlay && !verifyMobileGestures)
                 return;
 
             SessionState.EraseBool(CameraMovementVerificationKey);
@@ -72,10 +74,12 @@ namespace Mutiny.Verification.Editor
             SessionState.EraseBool(PiecesOfEightPresentationVerificationKey);
             SessionState.EraseBool(AimCancelTouchVerificationKey);
             SessionState.EraseBool(CharacterAimOverlayVerificationKey);
+            SessionState.EraseBool(MobileGesturesVerificationKey);
             bool passed = false;
             try
             {
                 MutinyLevel1VerificationResult result =
+                    verifyMobileGestures ? MutinyTurnActionUiVerificationTest.RunMobileGestures() :
                     verifyExplosionCamera ? MutinyTurnActionUiVerificationTest.RunExplosionCamera() :
                     verifyAiBoxCamera ? MutinyTurnActionUiVerificationTest.RunAiBoxCamera() :
                     verifyCannonPresentation ? MutinyTurnActionUiVerificationTest.RunCannonPresentation() :
@@ -93,7 +97,8 @@ namespace Mutiny.Verification.Editor
                         verifyWeaponLifecycle ? MutinyTurnActionUiVerificationTest.RunWeaponLifecycle() :
                             MutinyTurnActionUiVerificationTest.RunCameraMovement();
                 passed = result.Passed;
-                string label = verifyExplosionCamera ? "Explosion camera" :
+                string label = verifyMobileGestures ? "Mobile gestures" :
+                    verifyExplosionCamera ? "Explosion camera" :
                     verifyAiBoxCamera ? "AI box camera" :
                     verifyCannonPresentation ? "Cannon presentation" :
                     verifyAirDropPresentation ? "Air-drop presentation" :
@@ -140,9 +145,9 @@ namespace Mutiny.Verification.Editor
         public static void ValidateRuntimeResources()
         {
             var failures = new List<string>();
-            for (int level = 1; level <= 33; level++)
+            for (int level = 1; level <= 18; level++)
             {
-                string path = Mutiny.Levels.MutinyLevelId.FromOriginalNumber(level).ResourcePath;
+                string path = $"Data/Levels/level_{level:D2}";
                 if (Resources.Load<TextAsset>(path) == null)
                     failures.Add(path);
             }
@@ -323,6 +328,16 @@ namespace Mutiny.Verification.Editor
             else
                 Debug.LogError("[Mutiny Parity] Weapon ready/cancel verification failed:\n" +
                                string.Join("\n", result.Failures));
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Mobile Gestures Play Mode")]
+        public static void ValidateMobileGesturesPlayMode()
+        {
+            SessionState.SetBool(MobileGesturesVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
         }
 
         [MenuItem("Mutiny/Parity/Validate Aim Cancel Touch Play Mode")]

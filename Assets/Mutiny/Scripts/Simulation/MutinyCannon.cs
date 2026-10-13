@@ -421,7 +421,6 @@ namespace Mutiny.Simulation
             GameObject ballObject = new GameObject("Cannonball");
             m_Cannonball = ballObject.AddComponent<MutinyCannonball>();
             m_Cannonball.Initialize(Owner);
-            m_Cannonball.BindAiStrategy(AiStrategyContext);
             m_Cannonball.SetLaunchPosition(Position);
             m_Cannonball.Fire(velocity);
             // The AS2 logical name is "cannon explosion"; the imported Unity
@@ -512,6 +511,11 @@ namespace Mutiny.Simulation
         }
 
         private Vector2 Position => new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y);
+
+        // Network replay captures the exact board/pin pose at commit time so the
+        // peer can reproduce body sweeps and fire strength without pointer events.
+        internal Vector2 NetworkBodyPixel => Position;
+        internal Vector2 NetworkPinPixel => PinWorldPosition();
 
         private Vector2 GetPlacementCenterPixels()
         {

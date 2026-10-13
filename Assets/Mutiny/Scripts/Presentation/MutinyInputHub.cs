@@ -232,7 +232,7 @@ namespace Mutiny.Presentation
                     if (hud.TurnManager != null && hud.TurnManager.CurrentPhase == Simulation.TurnPhase.GameOver)
                         return "result";
                     if (hud.PlayerInput != null && hud.PlayerInput.IsActionMenuOpen)
-                        return "actions:" + hud.PlayerInput.GetEntityId();
+                        return "actions:" + hud.PlayerInput.GetInstanceID();
                 }
                 return "board";
             }

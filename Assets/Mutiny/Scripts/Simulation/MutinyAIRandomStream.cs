@@ -40,11 +40,6 @@ namespace Mutiny.Simulation
         public string Winner;
         public List<MutinyAIRandomDraw> Draws = new List<MutinyAIRandomDraw>();
         public List<MutinyAICandidateRecord> Candidates = new List<MutinyAICandidateRecord>();
-        // Runtime searches stream full records to disk; diagnostics may retain
-        // the arrays. These counters describe both modes without scanning arrays.
-        [NonSerialized] public int DrawCount;
-        [NonSerialized] public int CandidateCount;
-        [NonSerialized] public bool RecordsStreamed;
     }
 
     /// <summary>
@@ -60,8 +55,6 @@ namespace Mutiny.Simulation
         private int m_CandidateIndex;
 
         public MutinyAIDecisionTrace Trace { get; }
-        internal MutinyAITraceWriter Writer;
-        internal bool RetainRecords = true;
 
         public MutinyAIRandomStream(int seed, int decisionId, int teamNumber, string phase,
             MutinyAIDecisionTrace replay = null)
@@ -137,9 +130,7 @@ namespace Mutiny.Simulation
                     throw new InvalidDataException($"AI replay candidate {m_CandidateIndex} diverged");
                 m_CandidateIndex++;
             }
-            Trace.CandidateCount++;
-            Writer?.Record(candidate);
-            if (RetainRecords) Trace.Candidates.Add(candidate);
+            Trace.Candidates.Add(candidate);
         }
 
         private static bool SameFloats(float[] first, float[] second)
@@ -178,14 +169,10 @@ namespace Mutiny.Simulation
 
         private void Record(string kind, float minimum, float maximum, float value)
         {
-            Trace.DrawCount++;
-            if (!RetainRecords && Writer == null) return;
-            var draw = new MutinyAIRandomDraw
+            Trace.Draws.Add(new MutinyAIRandomDraw
             {
                 Kind = kind, Minimum = minimum, Maximum = maximum, Value = value
-            };
-            Writer?.Record(draw);
-            if (RetainRecords) Trace.Draws.Add(draw);
+            });
         }
     }
 }

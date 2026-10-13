@@ -64,9 +64,6 @@ namespace Mutiny.Levels
             levelRoot.Width = levelData.Width;
             levelRoot.Height = levelData.Height;
             levelRoot.Players = levelData.Players;
-            levelRoot.GravityScale = levelData.GravityScale;
-            levelRoot.VisualTheme = levelData.VisualTheme;
-            levelRoot.SpeechAudio = new List<MutinySpeechAudio>(levelData.SpeechAudio);
             levelRoot.SkyColour = MutinyOriginalBackground.SkyColourForLevel(levelIndex);
             MutinyAnimatedTiles animatedTiles = levelRootObj.AddComponent<MutinyAnimatedTiles>();
 
@@ -87,11 +84,8 @@ namespace Mutiny.Levels
             waterObj.transform.SetParent(levelRootObj.transform, false);
             levelRoot.WaterHolder = waterObj.transform;
             levelRoot.WaterLevelY = BuildWater(levelData, waterObj.transform, levelRoot.SkyColour);
-            if (MutinySpaceVisuals.IsSpace(levelData.VisualTheme))
-                bgObj.AddComponent<MutinySpaceBackground>().Initialize(levelRoot);
-            else
-                bgObj.AddComponent<MutinyBattleBackground>().Initialize(levelRoot,
-                    levelRoot.SkyColour);
+            bgObj.AddComponent<MutinyBattleBackground>().Initialize(levelRoot,
+                levelRoot.SkyColour);
 
             // 4. Objects (Characters & Items)
             GameObject objectsObj = new GameObject("Objects");
@@ -142,8 +136,7 @@ namespace Mutiny.Levels
                     if (string.IsNullOrEmpty(tileName) || tileName == "-" || tileName == "antichest")
                         continue;
 
-                    Sprite sprite = MutinySpaceVisuals.ResolveTile(levelData, tileName, x, y, true)
-                        ?? ResolveTileSprite(tileName);
+                    Sprite sprite = ResolveTileSprite(tileName);
                     if (sprite == null)
                         continue;
 
@@ -173,8 +166,7 @@ namespace Mutiny.Levels
                     if (string.IsNullOrEmpty(tileName) || tileName == "-")
                         continue;
 
-                    Sprite sprite = MutinySpaceVisuals.ResolveTile(levelData, tileName, x, y, false)
-                        ?? ResolveTileSprite(tileName);
+                    Sprite sprite = ResolveTileSprite(tileName);
                     if (sprite == null)
                         continue;
 
@@ -185,7 +177,6 @@ namespace Mutiny.Levels
                     SpriteRenderer sr = tileObj.AddComponent<SpriteRenderer>();
                     sr.sprite = sprite;
                     sr.sortingOrder = TerrainSortingOrder;
-                    MutinySpaceVisuals.ApplyRockMaterial(levelData, tileName, sr);
                     animatedTiles.Register(sr, tileName, x, y);
 
                     // Physical collision for solid terrain (exclude water ripples)
@@ -222,11 +213,8 @@ namespace Mutiny.Levels
             collider.isTrigger = true;
             collider.size = new Vector2(levelData.Width * CellSize + 20f, 10f);
 
-            if (!MutinySpaceVisuals.IsSpace(levelData.VisualTheme))
-            {
-                MutinyWaterSurface surface = parent.gameObject.AddComponent<MutinyWaterSurface>();
-                surface.Initialize(levelData.Width * CellSize, waterY, skyColour);
-            }
+            MutinyWaterSurface surface = parent.gameObject.AddComponent<MutinyWaterSurface>();
+            surface.Initialize(levelData.Width * CellSize, waterY, skyColour);
 
             return waterY;
         }
@@ -285,7 +273,6 @@ namespace Mutiny.Levels
 
                 var character = charObj.AddComponent<MutinyCharacter>();
                 character.Initialize(obj.Type, teamIndex, obj.X, obj.Y, obj.Properties);
-                if (character.PhysicsBody != null) character.PhysicsBody.State.GravityScale = levelRoot.GravityScale;
                 levelRoot.Characters.Add(character);
 
                 if (teamIndex == 1 && levelRoot.Team1 != null)
@@ -463,12 +450,9 @@ namespace Mutiny.Levels
             if (skyColour == 0)
                 skyColour = levelRoot != null ? levelRoot.SkyColour : 1;
 
-            bool space = levelRoot != null && MutinySpaceVisuals.IsSpace(levelRoot.VisualTheme);
-            GameObject splash = new GameObject(space ? "GalaxySplash" : "WaterSplash");
+            GameObject splash = new GameObject("WaterSplash");
             splash.transform.position = MutinyPhysics.PixelToUnity(pixelX, waterPixelY);
-            // Space effects belong to this level and disappear with it on GM/restart.
-            if (space) splash.transform.SetParent(levelRoot.transform, true);
-            splash.AddComponent<MutinySplashEffect>().Initialize(skyColour, space);
+            splash.AddComponent<MutinySplashEffect>().Initialize(skyColour);
         }
 
         internal static Sprite[] LoadFrameRange(string resourcePath, int firstFrame, int frameCount,
@@ -503,33 +487,12 @@ namespace Mutiny.Levels
         private float m_Accumulator;
         private int m_FrameIndex;
         public int CurrentSourceFrame { get; private set; }
-        public bool IsSpaceSplash { get; private set; }
 
-        public void Initialize(int skyColour, bool space = false)
+        public void Initialize(int skyColour)
         {
-            IsSpaceSplash = space;
-            if (space)
-            {
-                var frames = new List<Sprite>(VisibleFramesPerColour);
-                for (int pose = 1; pose <= 6; pose++)
-                {
-                    Sprite sprite = Resources.Load<Sprite>($"Art/Space16/Splash/{pose:D2}");
-                    if (sprite == null)
-                    {
-                        Debug.LogError("[Mutiny:Space] Missing galaxy splash pose " + pose, this);
-                        Destroy(gameObject);
-                        return;
-                    }
-                    for (int hold = 0; hold < 3; hold++) frames.Add(sprite);
-                }
-                m_Frames = frames.ToArray();
-            }
-            else
-            {
-                m_Frames = MutinyWaterSurface.LoadFrameRange("Art/Effects/Splash",
-                    (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1,
-                    VisibleFramesPerColour, new Vector2(0.5f, 0f));
-            }
+            m_Frames = MutinyWaterSurface.LoadFrameRange("Art/Effects/Splash",
+                (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1,
+                VisibleFramesPerColour, new Vector2(0.5f, 0f));
             if (m_Frames.Length == 0)
             {
                 Debug.LogError("[Mutiny:Water] Original splash frames are missing from Resources.", this);
@@ -540,7 +503,7 @@ namespace Mutiny.Levels
             m_Renderer = gameObject.AddComponent<SpriteRenderer>();
             m_Renderer.sortingOrder = MutinyLevelBuilder.SplashSortingOrder;
             m_Renderer.sprite = m_Frames[0];
-            CurrentSourceFrame = space ? 1 : (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1;
+            CurrentSourceFrame = (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1;
         }
 
         private void Update()

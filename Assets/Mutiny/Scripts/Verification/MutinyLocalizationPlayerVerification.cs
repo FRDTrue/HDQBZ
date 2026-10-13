@@ -7,7 +7,7 @@ using UnityEngine;
 namespace Mutiny.Verification
 {
     // Optional standalone Player regression. Run with
-    // -verifyLocalization first|saved-cn|saved-hk|saved-en on a test product identity.
+    // -verifyLocalization first|saved-cn|saved-en on a test product identity.
     public sealed class MutinyLocalizationPlayerVerification : MonoBehaviour
     {
         private const string Switch = "-verifyLocalization";
@@ -60,9 +60,8 @@ namespace Mutiny.Verification
                 yield break;
             }
 
-            string initial = s_Phase == "saved-cn" ? MutinyLocalization.SimplifiedChinese :
-                s_Phase == "saved-hk" ? MutinyLocalization.TraditionalChineseHongKong : MutinyLocalization.English;
-            if ((s_Phase != "first" && s_Phase != "saved-cn" && s_Phase != "saved-hk" && s_Phase != "saved-en") ||
+            string initial = s_Phase == "saved-cn" ? MutinyLocalization.SimplifiedChinese : MutinyLocalization.English;
+            if ((s_Phase != "first" && s_Phase != "saved-cn" && s_Phase != "saved-en") ||
                 MutinyLocalization.Code != initial ||
                 MutinySaveSystem.LanguageCode != (s_Phase == "first" ? string.Empty : initial))
             {
@@ -71,8 +70,7 @@ namespace Mutiny.Verification
                 yield break;
             }
 
-            string expected = initial == MutinyLocalization.English ? "play" :
-                initial == MutinyLocalization.TraditionalChineseHongKong ? "開始遊戲" : "开始游戏";
+            string expected = initial == MutinyLocalization.English ? "play" : "开始游戏";
             if (MutinyLocalization.Text("frontend.play", "play") != expected)
             {
                 Finish(false, "Title translation was not available on startup.");
@@ -80,20 +78,17 @@ namespace Mutiny.Verification
             }
 
             string[] commands =
-                { "lang en", "lang zh-cn", "lang zh-hk", "lang en", "lang zh-hk", "lang zh-cn", "lang en" };
+                { "setlanguage en", "setlanguage zh-cn", "setlanguage en", "setlanguage zh-cn", "setlanguage en" };
             foreach (string command in commands)
             {
-                string target = command == "lang zh-cn"
-                    ? MutinyLocalization.SimplifiedChinese : command == "lang zh-hk"
-                        ? MutinyLocalization.TraditionalChineseHongKong : MutinyLocalization.English;
-                expected = target == MutinyLocalization.English ? "play" :
-                    target == MutinyLocalization.TraditionalChineseHongKong ? "開始遊戲" : "开始游戏";
+                string target = command == "setlanguage zh-cn"
+                    ? MutinyLocalization.SimplifiedChinese : MutinyLocalization.English;
+                expected = target == MutinyLocalization.SimplifiedChinese ? "开始游戏" : "play";
                 if (!gm.ExecuteCommand(command) || MutinyLocalization.Code != target ||
                     MutinySaveSystem.LanguageCode != target ||
                     MutinyLocalization.Text("frontend.play", "play") != expected ||
                     MutinyLocalization.Text("frontend.scores", "scores") !=
-                        (target == MutinyLocalization.English ? "scores" :
-                            target == MutinyLocalization.TraditionalChineseHongKong ? "排行榜" : "成绩") ||
+                        (target == MutinyLocalization.English ? "scores" : "成绩") ||
                     MutinyLocalization.UseOriginalFont != (target == MutinyLocalization.English))
                 {
                     Finish(false, "GM switch or title text failed: " + command);

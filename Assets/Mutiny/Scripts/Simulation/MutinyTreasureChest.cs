@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Mutiny.Diagnostics;
 using Mutiny.Levels;
+using Mutiny.Network;
 using Mutiny.Presentation;
 using UnityEngine;
 
@@ -100,6 +101,18 @@ namespace Mutiny.Simulation
                 $"spawned x={PixelX:0} startY={PixelY:0} floorY={m_FloorY:0} itemCount={m_Contents.Count} sound=chest_appear", this);
         }
 
+        // AIR-02: the original air drop descends 3 px per 1/50 s tick (150 px/s).
+        // Quick battle triples that so the loot lands in about two seconds.
+        internal const float OriginalFallPixelsPerTick = 3f;
+        internal const float QuickBattleFallMultiplier = 3f;
+
+        /// <summary>
+        /// Fall step for one simulation tick. Both LAN peers resolve the same rule
+        /// (the host publishes it in MatchStartMessage), so the boards stay in step.
+        /// </summary>
+        internal static float ResolveFallPixelsPerTick(bool quickBattle) =>
+            OriginalFallPixelsPerTick * (quickBattle ? QuickBattleFallMultiplier : 1f);
+
         public void AdvanceOriginalTick()
         {
             if (!MutinyTreasureChestManager.SystemEnabled)
@@ -117,7 +130,7 @@ namespace Mutiny.Simulation
             else if (IsFalling)
             {
                 m_PreviousTickPixelY = PixelY;
-                PixelY += 3f;
+                PixelY += ResolveFallPixelsPerTick(MutinyNetworkManager.QuickBattleActive);
                 if (PixelY >= m_FloorY - 15f)
                 {
                     PixelY = m_FloorY - 15f;
@@ -184,7 +197,7 @@ namespace Mutiny.Simulation
                 return;
 
             // Verification and legacy scenes may not have a populated LevelRoot.
-            MutinyCharacter[] characters = FindObjectsByType<MutinyCharacter>();
+            MutinyCharacter[] characters = FindObjectsByType<MutinyCharacter>(FindObjectsSortMode.None);
             for (int i = 0; i < characters.Length; i++)
             {
                 if (TryTouchCharacter(characters[i]))

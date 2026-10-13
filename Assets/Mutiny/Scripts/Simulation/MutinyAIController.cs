@@ -4,6 +4,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using Stopwatch = System.Diagnostics.Stopwatch;
 using Mutiny.Diagnostics;
 using Mutiny.Levels;
 using UnityEngine;
@@ -31,8 +32,6 @@ namespace Mutiny.Simulation
         public float[] SeagullShotXs;
         public Vector2[] BoxPossibilities;
         public bool UsesForcedWeaponSupply;
-        public MutinyAIStrategyContext StrategyContext;
-        public MutinyAIActionPlan ActionPlan;
     }
 
     public enum MutinyAITurnGate
@@ -44,7 +43,7 @@ namespace Mutiny.Simulation
 
     [DisallowMultipleComponent]
     [RequireComponent(typeof(MutinyTeam))]
-    public sealed partial class MutinyAIController : MonoBehaviour
+    public sealed class MutinyAIController : MonoBehaviour
     {
         public const float OriginalChestMoveRadiusPixels = 40f;
         public const float OriginalChestMoveBonus = 0.5f;
@@ -60,6 +59,8 @@ namespace Mutiny.Simulation
 
         public static int ForcedWeaponId { get; private set; }
         public static string ForcedWeaponType => ForcedWeaponId == 0 ? null : ForceableWeaponTypes[ForcedWeaponId - 1];
+        /// <summary>How many weapons the GM weapon-cycle can force (ids 1..count; 0 clears).</summary>
+        public static int ForceableWeaponCount => ForceableWeaponTypes.Length;
         public static bool ActionLogEnabled { get; private set; }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -128,14 +129,6 @@ namespace Mutiny.Simulation
             public IEnumerator Steps;
             public bool ForceNextFrame;
             public string ForcedWeaponType;
-            public DecisionSnapshot Snapshot;
-            public MutinyAITraceWriter Writer;
-            public bool Streaming;
-            public IAIDecisionStrategy Strategy;
-            public MutinyAIStrategyContext StrategyContext;
-            public EnhancedDecisionState Enhanced;
-            public readonly Dictionary<string, float> BestByAction = new Dictionary<string, float>(StringComparer.Ordinal);
-            public readonly List<string> ActionOrder = new List<string>();
             public readonly Dictionary<MutinyCharacter, float> EffectiveLucks = new Dictionary<MutinyCharacter, float>();
         }
 
@@ -160,7 +153,6 @@ namespace Mutiny.Simulation
 
         private void Update()
         {
-            PollTraceWrites();
             if (m_TurnManager == null)
                 BindTurnManager();
 
@@ -173,127 +165,170 @@ namespace Mutiny.Simulation
 
         private void OnDestroy()
         {
-            CancelTurnRoutine();
-            if (m_TurnManager != null) m_TurnManager.OnTurnStarted -= HandleTurnStarted;
+            IsEvaluatingCandidates = false;
+            if (m_TurnManager != null)
+            {
+                m_TurnManager.OnTurnStarted -= HandleTurnStarted;
+            }
         }
 
         private void OnDisable()
         {
-            // Disabling a MonoBehaviour alone does not stop its coroutines.
-            CancelTurnRoutine();
+            // A disabled MonoBehaviour stops its coroutine without executing the
+            // cancellation branches below. Do not leave the camera's AI-thinking
+            // priority gate latched if the team/controller is disabled mid-turn.
+            IsEvaluatingCandidates = false;
+            m_Random = null;
         }
 
         private void HandleTurnStarted(MutinyTeam activeTeam)
         {
             MutinyDebugLog.Info("AI",
                 $"turn event activeTeam={TeamLabel(activeTeam)} self={TeamLabel(m_Team)} phase={m_TurnManager?.CurrentPhase}", this);
-            if (isActiveAndEnabled && activeTeam == m_Team && m_Team.IsAiControlled && !m_Team.IsDefeated)
+            if (activeTeam == m_Team && m_Team.IsAiControlled && !m_Team.IsDefeated)
                 BeginTurnRoutine("turn event");
         }
 
         private IEnumerator ExecuteAITurnRoutine()
         {
             IsEvaluatingCandidates = true;
-            // Always suspend once so StartCoroutine cannot finish before its handle
-            // is assigned, including an invalid/no-candidate decision.
-            yield return null;
-            MutinyDebugLog.Info("AI", $"thinking started team={TeamLabel(m_Team)} budget={DecisionBudgetMilliseconds}ms/frame", this);
-            while (ResolveTurnGate(m_TurnManager, m_Team) == MutinyAITurnGate.Wait) yield return null;
-            if (ResolveTurnGate(m_TurnManager, m_Team) == MutinyAITurnGate.Cancel)
-            { CancelDecisionWork(); m_TurnCoroutine = null; yield break; }
+            MutinyDebugLog.Info("AI",
+                $"thinking started team={TeamLabel(m_Team)} budget=30ms/frame", this);
+
+            bool loggedWait = false;
+            MutinyAITurnGate gate = ResolveTurnGate(m_TurnManager, m_Team);
+            while (gate == MutinyAITurnGate.Wait)
+            {
+                if (!loggedWait)
+                {
+                    loggedWait = true;
+                    MutinyDebugLog.Info("AI",
+                        $"waiting for board readiness team={TeamLabel(m_Team)} phase={m_TurnManager.CurrentPhase}", this);
+                }
+                yield return null;
+                gate = ResolveTurnGate(m_TurnManager, m_Team);
+            }
+
+            if (gate == MutinyAITurnGate.Cancel)
+            {
+                IsEvaluatingCandidates = false;
+                MutinyDebugLog.Info("AI", "thinking cancelled because the active turn changed", this);
+                m_TurnCoroutine = null;
+                yield break;
+            }
+
+            var camera = FindAnyObjectByType<Mutiny.Presentation.MutinyCameraController>();
 
             DecisionWork work = null;
-            Exception error = null;
-            try { work = PrepareDecisionWork(streaming: true); m_ActiveWork = work; }
-            catch (Exception exception) { error = exception; }
-            MaximumSearchSliceMilliseconds = 0;
-            SearchSliceCount = 0;
-            bool complete = false;
-            while (error == null && !complete)
+            Exception evaluationError = null;
+            try { work = PrepareDecisionWork(); }
+            catch (Exception exception) { evaluationError = exception; }
+
+            var budget = Stopwatch.StartNew();
+            while (evaluationError == null)
             {
-                var gate = ResolveTurnGate(m_TurnManager, m_Team);
+                bool hasStep = false;
+                try { hasStep = work.Steps.MoveNext(); }
+                catch (Exception exception) { evaluationError = exception; }
+                if (evaluationError != null || !hasStep)
+                    break;
+                if (!ShouldYieldDecisionFrame(work.ForceNextFrame, budget.ElapsedMilliseconds))
+                    continue;
+                work.ForceNextFrame = false;
+                yield return null;
+                gate = ResolveTurnGate(m_TurnManager, m_Team);
                 if (gate == MutinyAITurnGate.Cancel)
-                { CancelDecisionWork(); m_TurnCoroutine = null; yield break; }
-                if (gate == MutinyAITurnGate.Wait) { yield return null; continue; }
-                if (!DecisionIsCurrent(work))
                 {
-                    InvalidatedDecisionCount++;
-                    MutinyDebugLog.Info("AI", "board changed; discarding incomplete decision reason=" + LastDecisionInvalidationReason, this);
-                    CancelDecisionWork(); m_TurnCoroutine = null; yield break;
+                    IsEvaluatingCandidates = false;
+                    m_Random = null;
+                    m_TurnCoroutine = null;
+                    yield break;
                 }
-                try { complete = AdvanceDecisionSlice(work); }
-                catch (Exception exception) { error = exception; }
-                if (!complete && error == null) yield return null;
-            }
-            AIMove move = CreatePassMove();
-            if (error == null)
-            {
-                try { move = FinishDecisionWork(work); }
-                catch (Exception exception) { error = exception; }
-            }
-            if (error != null)
-            {
-                // An error must never commit an action in a different/new turn.
-                var gate = ResolveTurnGate(m_TurnManager, m_Team);
-                CancelDecisionWork();
-                Debug.LogException(error, this);
-                if (gate == MutinyAITurnGate.Execute && (work == null || StrategyIsCurrent(work)))
+                while (gate == MutinyAITurnGate.Wait)
                 {
-                    if (ActionLogEnabled) Debug.Log($"[Mutiny:AI-Action] team={m_Team?.TeamNumber ?? 0} decision={work?.Id ?? 0} mode={work?.StrategyContext.ModeId ?? "unknown"} strategy={work?.StrategyContext.StrategyId ?? "none"} algorithm={work?.StrategyContext.AlgorithmId ?? "none"} fallback={work?.StrategyContext.UsesFallback ?? false} strategyVersion={work?.StrategyContext.ConfigurationVersion ?? -1} phase={work?.Phase ?? "unprepared"} action=Pass score=NA reason=evaluation-error:{error.GetType().Name} candidates={work?.CandidateCount ?? 0}", this);
-                    m_TurnManager.PassTurn();
+                    yield return null;
+                    gate = ResolveTurnGate(m_TurnManager, m_Team);
                 }
-                m_TurnCoroutine = null; yield break;
+                if (gate == MutinyAITurnGate.Cancel)
+                {
+                    IsEvaluatingCandidates = false;
+                    m_Random = null;
+                    m_TurnCoroutine = null;
+                    yield break;
+                }
+                budget.Restart();
             }
-            if (!DecisionIsCurrent(work))
-            { InvalidatedDecisionCount++; CancelDecisionWork(); m_TurnCoroutine = null; yield break; }
-            IsEvaluatingCandidates = false;
-            if (move.MoveType == AIMoveType.Pass || move.Character == null)
+
+            AIMove bestMove = CreatePassMove();
+            if (evaluationError == null)
             {
-                LastCommittedStrategy = move.StrategyContext;
-                LogCommittedAction(work, move);
+                try { bestMove = FinishDecisionWork(work); }
+                catch (Exception exception) { evaluationError = exception; }
+            }
+            if (evaluationError != null)
+            {
+                IsEvaluatingCandidates = false;
+                m_Random = null;
+                Debug.LogException(evaluationError, this);
+                MutinyDebugLog.Warning("AI", "move evaluation failed; passing the turn", this);
+                if (ActionLogEnabled)
+                    Debug.Log($"[Mutiny:AI-Action] team={m_Team?.TeamNumber ?? 0} decision={work?.Id ?? 0} phase={work?.Phase ?? "unprepared"} action=Pass score=NA reason=evaluation-error:{evaluationError.GetType().Name} candidates={work?.CandidateCount ?? 0}", this);
                 m_TurnManager.PassTurn();
-                m_ActiveWork = null; m_TurnCoroutine = null; yield break;
+                m_TurnCoroutine = null;
+                yield break;
             }
-            m_Team.SelectCharacter(move.Character);
-            var camera = FindAnyObjectByType<Mutiny.Presentation.MutinyCameraController>();
+            IsEvaluatingCandidates = false;
+
+            if (bestMove.MoveType == AIMoveType.Pass || bestMove.Character == null)
+            {
+                MutinyDebugLog.Info("AI", "no safe or rewarding action found; passing the turn", this);
+                LogCommittedAction(work, bestMove);
+                m_TurnManager.PassTurn();
+                m_TurnCoroutine = null;
+                yield break;
+            }
+
+            m_Team.SelectCharacter(bestMove.Character);
+            MutinyDebugLog.Info("AI",
+                $"selected type={bestMove.MoveType} character={bestMove.Character.name} weapon={bestMove.WeaponType} score={bestMove.Score:0.00} velocity={bestMove.LaunchVelocity}", this);
+
+            // Flash Team.advance assigns panToCharacter to the winning character
+            // and does not call aiPerform until that target has cleared. The turn's
+            // initial camera target may be a different pirate, so request it again
+            // after the global candidate winner is known.
             if (camera != null)
             {
-                BeginWinnerCameraPan(camera, move.Character);
+                BeginWinnerCameraPan(camera, bestMove.Character);
                 while (camera.IsPanningToTurnTarget)
                 {
                     yield return null;
-                    if (!StrategyIsCurrent(work))
+                    gate = ResolveTurnGate(m_TurnManager, m_Team);
+                    if (gate == MutinyAITurnGate.Cancel)
                     {
-                        LastDecisionInvalidationReason = "ai-strategy";
-                        InvalidatedDecisionCount++;
-                        CancelDecisionWork(); m_TurnCoroutine = null; yield break;
+                        MutinyDebugLog.Info("AI", "selected move cancelled while panning to winner", this);
+                        m_TurnCoroutine = null;
+                        yield break;
                     }
-                    if (ResolveTurnGate(m_TurnManager, m_Team) == MutinyAITurnGate.Cancel)
-                    { CancelDecisionWork(); m_TurnCoroutine = null; yield break; }
                 }
             }
-            while (ResolveTurnGate(m_TurnManager, m_Team) == MutinyAITurnGate.Wait) yield return null;
-            if (ResolveTurnGate(m_TurnManager, m_Team) == MutinyAITurnGate.Execute &&
-                DecisionIsCurrent(work, ignoreSelection: true) && move.Character.IsAlive)
-            {
-                LogCommittedAction(work, move);
-                ExecuteMove(move);
-            }
-            else InvalidatedDecisionCount++;
-            CancelDecisionWork();
-            m_TurnCoroutine = null;
-        }
 
-        private bool DecisionIsCurrent(DecisionWork work, bool ignoreSelection = false)
-        {
-            string reason;
-            if (work == null) reason = "missing-decision";
-            else if (!StrategyIsCurrent(work)) reason = "ai-strategy";
-            else if (work.ForcedWeaponType != ForcedWeaponType) reason = "forced-weapon";
-            else if (!EnhancedInputsAreCurrent(work, out reason)) { }
-            else if (work.Snapshot.Matches(this, out reason, ignoreSelection)) return true;
-            LastDecisionInvalidationReason = reason;
-            return false;
+            gate = ResolveTurnGate(m_TurnManager, m_Team);
+            while (gate == MutinyAITurnGate.Wait)
+            {
+                yield return null;
+                gate = ResolveTurnGate(m_TurnManager, m_Team);
+            }
+
+            if (gate == MutinyAITurnGate.Execute)
+            {
+                if (bestMove.Character != null && bestMove.Character.IsAlive)
+                    LogCommittedAction(work, bestMove);
+                ExecuteMove(bestMove);
+            }
+            else
+                MutinyDebugLog.Info("AI", "selected move cancelled because active turn changed", this);
+
+            m_TurnCoroutine = null;
         }
 
         private static bool BeginWinnerCameraPan(
@@ -327,21 +362,12 @@ namespace Mutiny.Simulation
         public AIMove EvaluateBestMove()
         {
             DecisionWork work = PrepareDecisionWork();
-            try
-            {
-                while (work.Steps.MoveNext()) { }
-                return FinishDecisionWork(work);
-            }
-            finally
-            {
-                (work.Steps as IDisposable)?.Dispose();
-                work.Writer?.Abort();
-                m_Random = null;
-            }
+            while (work.Steps.MoveNext()) { }
+            return FinishDecisionWork(work);
         }
 
         internal static bool ShouldYieldDecisionFrame(bool forceNextFrame, long elapsedMilliseconds)
-            => forceNextFrame || elapsedMilliseconds >= DefaultDecisionBudgetMilliseconds;
+            => forceNextFrame || elapsedMilliseconds >= 30;
 
         internal IEnumerator EvaluateBestMoveStepsForVerification(Action<AIMove> completed)
         {
@@ -356,7 +382,7 @@ namespace Mutiny.Simulation
             m_ReplayOverride = trace;
         }
 
-        private DecisionWork PrepareDecisionWork(bool streaming = false)
+        private DecisionWork PrepareDecisionWork()
         {
             if (m_Team == null)
                 m_Team = GetComponent<MutinyTeam>();
@@ -364,15 +390,13 @@ namespace Mutiny.Simulation
             var work = new DecisionWork
             {
                 Id = decisionId,
-                Streaming = streaming,
                 Best = new AIMove { MoveType = AIMoveType.Pass, Score = float.NegativeInfinity },
                 ForcedWeaponType = ForcedWeaponType
             };
-            BindDecisionStrategy(work);
 
             // Flash keeps dead characters in Team.characters when calculating the
             // opposing centroid; individual distance scoring then checks alive.
-            var allChars = FindObjectsByType<MutinyCharacter>();
+            var allChars = FindObjectsByType<MutinyCharacter>(FindObjectsSortMode.None);
             var enemies = new List<MutinyCharacter>();
             var allies = new List<MutinyCharacter>();
 
@@ -396,14 +420,13 @@ namespace Mutiny.Simulation
 
             work.Enemies = enemies;
             work.Allies = allies;
-            work.Snapshot = new DecisionSnapshot(this, enemies, allies);
             foreach (MutinyCharacter character in allies)
                 work.EffectiveLucks[character] = GetEffectiveLuck(character);
 
             if (enemies.Count == 0 || allies.Count == 0 || !ContainsAlive(enemies) || !ContainsAlive(allies))
             {
                 work.Phase = "invalid-board";
-                work.Steps = CompleteDecisionSteps(work, EmptyDecisionSteps());
+                work.Steps = EmptyDecisionSteps();
                 BeginDecisionRandom(work);
                 return work;
             }
@@ -441,91 +464,115 @@ namespace Mutiny.Simulation
                 !activeChar.CanThrow && activeChar.CanShoot ? activeChar : null;
             work.Phase = work.ContinuationCharacter != null ? "continuation" : "first-action";
             BeginDecisionRandom(work);
-            work.Steps = CompleteDecisionSteps(work, work.Strategy.Evaluate(this, work));
+            work.Steps = EvaluateDecisionSteps(work);
             return work;
         }
 
         private static IEnumerator EmptyDecisionSteps() { yield break; }
 
-        private IEnumerator CompleteDecisionSteps(DecisionWork work, IEnumerator steps)
+        private IEnumerator EvaluateDecisionSteps(DecisionWork work)
         {
-            try
-            {
-                while (true)
-                {
-                    while (work.Writer != null && !work.Writer.CanAcceptRecords) yield return null;
-                    if (!steps.MoveNext()) break;
-                    yield return null;
-                }
-                if (m_Random != null)
-                {
-                    m_Random.AssertReplayComplete();
-                    AIMove move = ResolveDecisionWinner(work);
-                    m_Random.Trace.Winner = $"{move.MoveType}:{move.Character?.name}:{move.WeaponType}:{move.Score:R}";
-                    while (work.Writer != null && !work.Writer.TryComplete(m_Random.Trace)) yield return null;
-                }
-            }
-            finally { (steps as IDisposable)?.Dispose(); }
-        }
-
-        private IEnumerator EvaluateLegacyDecisionSteps(DecisionWork work)
-        {
-            var actors = work.ContinuationCharacter != null
-                ? new List<MutinyCharacter> { work.ContinuationCharacter } : work.Allies;
+            List<MutinyCharacter> actors = work.ContinuationCharacter != null
+                ? new List<MutinyCharacter> { work.ContinuationCharacter }
+                : work.Allies;
             for (int actorIndex = 0; actorIndex < actors.Count; actorIndex++)
             {
                 MutinyCharacter actor = actors[actorIndex];
-                CharacterSnapshot state = StateOf(actor, work);
-                if (state.Alive)
+                if (actor == null || !actor.IsAlive)
                 {
-                    if (work.ContinuationCharacter == null && state.CanThrow)
+                    if (actorIndex < actors.Count - 1)
                     {
-                        if (work.Enhanced != null)
-                        {
-                            // Enhanced movement has its own sampling and ranking.
-                            // Keep the original 50-sample RNG order in Legacy.
-                            foreach (object step in EvaluateEnhancedJumpSteps(actor, work)) yield return null;
-                        }
-                        else
-                        {
-                            // All 50 trajectories are generated before the first score/RNG follow-up.
-                            var throws = new List<SelfThrowSample>(50);
-                            foreach (object step in BuildSelfThrowSteps(actor, work, throws)) yield return null;
-                            foreach (var sample in throws)
-                            {
-                                EvaluateSelfThrowSample(actor, sample, work, ref work.Best, ref work.CandidateCount);
-                                yield return null;
-                            }
-                        }
+                        work.ForceNextFrame = true;
+                        yield return null;
+                        work.ForceNextFrame = false;
                     }
-                    if (state.CanShoot)
+                    continue;
+                }
+                if (work.ContinuationCharacter == null && actor.CanThrow)
+                {
+                    // Character.aiThink generates all 50 throws first, then scores
+                    // one landing per call. This also preserves random draw order.
+                    List<SelfThrowSample> throws = BuildSelfThrowSamples(actor, work);
+                    yield return null;
+                    foreach (SelfThrowSample sample in throws)
                     {
-                        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        foreach (string weapon in WeaponChoices(actor, work))
-                        {
-                            if (!HasEffectiveWeapon(actor, weapon, work) || !seen.Add(weapon)) continue;
-                            foreach (object step in EvaluateWeaponSteps(actor, weapon, work)) yield return null;
-                        }
+                        if (!actor.IsAlive)
+                            break;
+                        AIMove best = work.Best;
+                        int count = work.CandidateCount;
+                        EvaluateSelfThrowSample(actor, sample, work, ref best, ref count);
+                        work.Best = best;
+                        work.CandidateCount = count;
+                        yield return null;
                     }
                 }
-                if (actorIndex < actors.Count - 1) { work.ForceNextFrame = true; yield return null; }
+
+                if (!actor.CanShoot)
+                {
+                    if (actorIndex < actors.Count - 1)
+                    {
+                        work.ForceNextFrame = true;
+                        yield return null;
+                        work.ForceNextFrame = false;
+                    }
+                    continue;
+                }
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string weapon in EnumerateWeaponChoices(actor, work.ForcedWeaponType))
+                {
+                    if (!actor.IsAlive)
+                        break;
+                    if (!HasEffectiveWeapon(actor, weapon, work.ForcedWeaponType) || !seen.Add(weapon))
+                        continue;
+                    AIMove best = work.Best;
+                    int count = work.CandidateCount;
+                    EvaluateCharacterWeapons(actor, work.Enemies, work.Allies, work.Terrain,
+                        work.GridW, work.GridH, work.WaterY, ref best, ref count, weapon,
+                        work.ForcedWeaponType, work.EffectiveLucks[actor]);
+                    work.Best = best;
+                    work.CandidateCount = count;
+                    yield return null;
+                }
+                // Team.advance breaks after the current unfinished character,
+                // even when it finished before using its whole 30 ms budget.
+                if (actorIndex < actors.Count - 1)
+                {
+                    work.ForceNextFrame = true;
+                    yield return null;
+                    work.ForceNextFrame = false;
+                }
             }
         }
 
         private AIMove FinishDecisionWork(DecisionWork work)
         {
-            AIMove move = ResolveDecisionWinner(work);
-            LastDecisionCandidateCount = work.CandidateCount;
-            LastDecisionTracePath = work.TracePath;
-            LastDecisionStrategy = work.StrategyContext;
+            AIMove move = work.Phase == "continuation" &&
+                (work.Best.Character == null || work.Best.Score <= 0f)
+                ? CreatePassMove() : work.Best;
             if (m_Random != null)
             {
                 m_Random.AssertReplayComplete();
                 m_Random.Trace.Winner = $"{move.MoveType}:{move.Character?.name}:{move.WeaponType}:{move.Score:R}";
                 LastDecisionTrace = m_Random.Trace;
+                if (SaveDecisionTrace)
+                {
+                    try
+                    {
+                        string directory = Path.Combine(Application.persistentDataPath, "ai-decisions");
+                        Directory.CreateDirectory(directory);
+                        string path = Path.Combine(directory,
+                            $"team-{m_Team.TeamNumber}-decision-{work.Id}-{DateTime.UtcNow:yyyyMMddHHmmssfff}.json");
+                        File.WriteAllText(path, JsonUtility.ToJson(m_Random.Trace, true));
+                        work.TracePath = path;
+                        MutinyDebugLog.Info("AI-Decision", $"trace={path} seed={m_Random.Trace.Seed}", this);
+                    }
+                    catch (IOException exception)
+                    {
+                        MutinyDebugLog.Warning("AI-Decision", $"cannot save trace: {exception.Message}", this);
+                    }
+                }
                 m_Random = null;
             }
-            FinishEnhancedDiagnostics(work);
             LogDecisionSummary(work.Id, work.Phase, work.CandidateCount, move);
             return move;
         }
@@ -547,17 +594,6 @@ namespace Mutiny.Simulation
             int seed = replay != null ? replay.Seed :
                 UseFixedDecisionSeed ? FixedDecisionSeed : UnityEngine.Random.Range(1, int.MaxValue);
             m_Random = new MutinyAIRandomStream(seed, work.Id, m_Team.TeamNumber, work.Phase, replay);
-            m_Random.RetainRecords = !work.Streaming;
-            m_Random.Trace.RecordsStreamed = work.Streaming;
-            if (SaveDecisionTrace)
-            {
-                string path = Path.Combine(Application.persistentDataPath, "ai-decisions",
-                    $"team-{m_Team.TeamNumber}-decision-{work.Id}-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}.json");
-                work.Writer = new MutinyAITraceWriter(path);
-                work.TracePath = path;
-                m_Random.Writer = work.Writer;
-                m_PendingTraceWrites.Add(work.Writer);
-            }
         }
 
         private void LogDecisionSummary(int decisionId, string phase, int candidateCount, AIMove move)
@@ -578,11 +614,6 @@ namespace Mutiny.Simulation
             var line = new StringBuilder(384);
             line.Append("[Mutiny:AI-Action] team=").Append(m_Team.TeamNumber)
                 .Append(" decision=").Append(work.Id)
-                .Append(" mode=").Append(work.StrategyContext.ModeId)
-                .Append(" strategy=").Append(work.StrategyContext.StrategyId)
-                .Append(" algorithm=").Append(work.StrategyContext.AlgorithmId)
-                .Append(" fallback=").Append(work.StrategyContext.UsesFallback)
-                .Append(" strategyVersion=").Append(work.StrategyContext.ConfigurationVersion)
                 .Append(" seed=").Append(trace != null ? trace.Seed.ToString(CultureInfo.InvariantCulture) : "NA")
                 .Append(" phase=").Append(work.Phase)
                 .Append(" candidates=").Append(work.CandidateCount)
@@ -605,7 +636,6 @@ namespace Mutiny.Simulation
                 if (usesArcSamples)
                 {
                     int samples = Mathf.FloorToInt(luck * m_Team.Characters.Count / Mathf.Max(1, m_Team.AliveCount));
-                    if (work.Enhanced != null) samples = Mathf.Clamp(samples, 4, EnhancedMaxWeaponSamples);
                     line.Append(" weaponSamples=").Append(samples);
                 }
                 bool hasVelocity = move.MoveType == AIMoveType.SelfThrow ||
@@ -631,11 +661,9 @@ namespace Mutiny.Simulation
                         .Append(Number(move.Character.PhysicsBody.WaterPixelY)).Append(')');
             }
 
-            line.Append(" bestByAction=").Append(BestScoresByAction(work));
-            AppendEnhancedLog(line, work, move);
+            line.Append(" bestByAction=").Append(BestScoresByAction(trace));
             if (!string.IsNullOrEmpty(work.TracePath))
-                line.Append(" trace=").Append(work.TracePath).Append(" traceStatus=")
-                    .Append(work.Writer.Error != null ? "failed" : work.Writer.Completion.IsCompleted ? "ready" : "pending");
+                line.Append(" trace=").Append(work.TracePath);
             if (move.MoveType == AIMoveType.Pass)
             {
                 if (work.Best.Character != null)
@@ -648,13 +676,13 @@ namespace Mutiny.Simulation
                 line.Append(" bestRejectedScore=")
                     .Append(work.Best.Character != null ? Number(work.Best.Score) : "NA")
                     .Append(" reason=")
-                    .Append(work.Enhanced != null ? "no-positive-settled-full-effect-outcome" : work.Phase == "continuation" && work.Best.Character != null
+                    .Append(work.Phase == "continuation" && work.Best.Character != null
                         ? "continuation-best-score-not-positive"
                         : "no-valid-candidate");
             }
             else
             {
-                line.Append(" reason=").Append(work.Enhanced != null ? "highest-full-effect-score-above-pass" : work.Phase == "continuation"
+                line.Append(" reason=").Append(work.Phase == "continuation"
                     ? "highest-score-above-zero"
                     : "highest-score-first-action-no-positive-threshold")
                     .Append(" tieRule=first-candidate-wins");
@@ -664,14 +692,29 @@ namespace Mutiny.Simulation
             Debug.Log(line.ToString(), this);
         }
 
-        private static string BestScoresByAction(DecisionWork work)
+        private static string BestScoresByAction(MutinyAIDecisionTrace trace)
         {
+            if (trace == null || trace.Candidates == null || trace.Candidates.Count == 0)
+                return "[]";
+            var order = new List<string>();
+            var best = new Dictionary<string, float>(StringComparer.Ordinal);
+            foreach (MutinyAICandidateRecord candidate in trace.Candidates)
+            {
+                string action = candidate.MoveType == nameof(AIMoveType.SelfThrow)
+                    ? "jump" : string.IsNullOrEmpty(candidate.Weapon) ? candidate.MoveType : candidate.Weapon;
+                if (!best.TryGetValue(action, out float previous))
+                {
+                    order.Add(action);
+                    best.Add(action, candidate.Score);
+                }
+                else if (candidate.Score > previous)
+                    best[action] = candidate.Score;
+            }
             var result = new StringBuilder("[");
-            for (int i = 0; i < work.ActionOrder.Count; i++)
+            for (int i = 0; i < order.Count; i++)
             {
                 if (i > 0) result.Append(',');
-                string action = work.ActionOrder[i];
-                result.Append(action).Append(':').Append(Number(work.BestByAction[action]));
+                result.Append(order[i]).Append(':').Append(Number(best[order[i]]));
             }
             return result.Append(']').ToString();
         }
@@ -704,28 +747,112 @@ namespace Mutiny.Simulation
         }
 
         private void EvaluateCharacterWeapons(
-            MutinyCharacter shooter, List<MutinyCharacter> enemies, List<MutinyCharacter> allies,
-            string[,] terrainGrid, int gridW, int gridH, float waterPixelY,
-            ref AIMove bestMove, ref int candidateCount, string onlyWeaponType = null,
-            string forcedWeaponType = null, float? decisionLuck = null)
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            ref AIMove bestMove,
+            ref int candidateCount,
+            string onlyWeaponType = null,
+            string forcedWeaponType = null,
+            float? decisionLuck = null)
         {
-            if (m_Team == null) m_Team = GetComponent<MutinyTeam>();
-            var work = new DecisionWork
-            {
-                Best = bestMove, CandidateCount = candidateCount, Enemies = enemies, Allies = allies,
-                Terrain = terrainGrid, GridW = gridW, GridH = gridH, WaterY = waterPixelY,
-                ForcedWeaponType = forcedWeaponType, Snapshot = new DecisionSnapshot(this, enemies, allies)
-            };
-            work.EffectiveLucks[shooter] = decisionLuck ?? GetEffectiveLuck(shooter);
+            if (m_Team == null)
+                m_Team = GetComponent<MutinyTeam>();
+            Vector2 shooterPos = new Vector2(shooter.PhysicsBody.State.X, shooter.PhysicsBody.State.Y);
+
+            float effectiveLuck = decisionLuck ?? GetEffectiveLuck(shooter);
+            int samples = Mathf.FloorToInt(effectiveLuck * m_Team.Characters.Count / Mathf.Max(1, m_Team.AliveCount));
+            List<PhysicsBoxObstacle> simulationBoxes = MutinyBoxRegistry.GetObstacles();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string weapon in WeaponChoices(shooter, work))
+            foreach (string weaponType in EnumerateWeaponChoices(shooter, forcedWeaponType))
             {
-                if (onlyWeaponType != null && !string.Equals(onlyWeaponType, weapon, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!HasEffectiveWeapon(shooter, weapon, work) || !seen.Add(weapon)) continue;
-                foreach (object step in EvaluateWeaponSteps(shooter, weapon, work)) { }
+                if (onlyWeaponType != null && !string.Equals(onlyWeaponType, weaponType, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!HasEffectiveWeapon(shooter, weaponType, forcedWeaponType) || !seen.Add(weaponType))
+                    continue;
+
+                if (string.Equals(weaponType, "tidalWave", StringComparison.OrdinalIgnoreCase))
+                {
+                    float score = ScoreTidalWave(enemies, allies, waterPixelY);
+                    ConsiderCandidate(ref bestMove, new AIMove { MoveType = AIMoveType.ShootWeapon, Character = shooter, WeaponType = weaponType, Score = score }, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "voodooDoll", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateVoodoo(shooter, enemies, terrainGrid, gridW, gridH, waterPixelY, ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "seagull", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateSeagull(shooter, enemies, allies, terrainGrid, gridW, gridH, waterPixelY,
+                        ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "gunpowderBarrel", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateBoxWeapon(shooter, enemies, allies, terrainGrid, gridW, gridH, weaponType,
+                        ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "woodenCrate", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateBoxWeapon(shooter, enemies, allies, terrainGrid, gridW, gridH, weaponType,
+                        ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "anchor", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateAnchor(shooter, enemies, allies, terrainGrid, gridW, gridH, waterPixelY,
+                        samples, ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "cannon", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateCannon(shooter, enemies, allies, terrainGrid, gridW, gridH, waterPixelY,
+                        samples, ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (!MutinyWeaponFactoryCanFire(weaponType))
+                    continue;
+
+                PhysicsBodyState formalTemplate = CreateFormalWeaponPredictionTemplate(shooter, weaponType);
+                for (int s = 0; s < samples; s++)
+                {
+                    Vector2 velocity = RandomArc(MutinyWeaponFactory.GetTwangMaxForce(weaponType));
+                    PhysicsBodyState body = formalTemplate;
+                    body.X = shooterPos.x;
+                    body.Y = shooterPos.y;
+                    body.VelocityX = velocity.x;
+                    body.VelocityY = velocity.y;
+                    Vector2 impact = SimulateWeaponImpact(body, weaponType, terrainGrid, gridW, gridH,
+                        waterPixelY, simulationBoxes, out _);
+                    float score = ScoreGenericWeaponCandidate(weaponType, impact, enemies, allies);
+                    ConsiderCandidate(ref bestMove, new AIMove
+                    {
+                        MoveType = AIMoveType.ShootWeapon,
+                        Character = shooter,
+                        WeaponType = weaponType,
+                        LaunchVelocity = velocity,
+                        TargetPosition = impact,
+                        Score = score
+                    }, ref candidateCount);
+                }
             }
-            bestMove = work.Best;
-            candidateCount = work.CandidateCount;
+
+            if (bestMove.MoveType == AIMoveType.ShootWeapon &&
+                string.Equals(bestMove.WeaponType, forcedWeaponType, StringComparison.OrdinalIgnoreCase))
+                bestMove.UsesForcedWeaponSupply = true;
         }
 
         private static IEnumerable<string> EnumerateWeaponChoices(MutinyCharacter character, string forcedWeaponType)
@@ -768,34 +895,327 @@ namespace Mutiny.Simulation
             return bestMove;
         }
 
-        private static Vector2 SimulateSeagullShotImpact(
-            float startX, float startY, string[,] terrainGrid, int gridW, int gridH,
-            float waterPixelY, IReadOnlyList<PhysicsBoxObstacle> boxes)
+        private void EvaluateBoxWeapon(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            string weaponType,
+            ref AIMove bestMove,
+            ref int candidateCount)
         {
-            var body = PhysicsBodyState.CreateDefault(startX, startY);
+            // BoxWeapon.aiSimulation: sample ten locations around living enemies.
+            // A candidate is admitted only when the same production CanPlace test
+            // accepts it; Character.aiThink needs at least three candidates.
+            if (terrainGrid == null || gridW <= 0 || gridH <= 0)
+                return;
+
+            float allyAverageX = 0f;
+            int allyCount = 0;
+            for (int i = 0; i < allies.Count; i++)
+            {
+                if (allies[i] != null && allies[i].IsAlive && allies[i].PhysicsBody != null)
+                {
+                    allyAverageX += PositionOf(allies[i]).x;
+                    allyCount++;
+                }
+            }
+            if (allyCount == 0)
+                return;
+            allyAverageX /= allyCount;
+
+            var livingEnemies = new List<MutinyCharacter>();
+            for (int i = 0; i < enemies.Count; i++)
+                if (enemies[i] != null && enemies[i].IsAlive && enemies[i].PhysicsBody != null)
+                    livingEnemies.Add(enemies[i]);
+            if (livingEnemies.Count == 0)
+                return;
+
+            MutinyWeapon probe = MutinyWeaponFactory.SpawnWeapon(weaponType, shooter);
+            if (probe == null)
+                return;
+            try
+            {
+                probe.PhysicsBody.SetTerrain(terrainGrid, gridW, gridH);
+                var possibilities = new List<Vector2>(10);
+                for (int sample = 0; sample < 10; sample++)
+                {
+                    MutinyCharacter enemy = livingEnemies[NextRandomInt(0, livingEnemies.Count)];
+                    Vector2 target = PositionOf(enemy);
+                    float sign = Mathf.Approximately(allyAverageX, target.x) ? 0f : Mathf.Sign(allyAverageX - target.x);
+                    float offsetX = sign * NextRandomInt(16, 64);
+                    float offsetY = NextRandomInt(-50, 50);
+                    Vector2 candidate = new Vector2(target.x + offsetX, target.y + offsetY);
+                    if (CanPlaceBoxWeapon(probe, candidate))
+                        possibilities.Add(candidate);
+                }
+
+                if (possibilities.Count >= 3)
+                {
+                    ConsiderCandidate(ref bestMove, new AIMove
+                    {
+                        MoveType = AIMoveType.ShootWeapon,
+                        Character = shooter,
+                        WeaponType = weaponType,
+                        Score = NextRandomFloat(0f, 1f),
+                        BoxPossibilities = possibilities.ToArray()
+                    }, ref candidateCount);
+                }
+            }
+            finally
+            {
+                probe.gameObject.SetActive(false);
+                Destroy(probe.gameObject);
+            }
+        }
+
+        private static bool CanPlaceBoxWeapon(MutinyWeapon probe, Vector2 candidate)
+        {
+            if (probe is MutinyGunpowderBarrel barrel)
+                return barrel.CanPlace(candidate);
+            if (probe is MutinyWoodenCrate crate)
+                return crate.CanPlace(candidate);
+            return false;
+        }
+
+        private void EvaluateAnchor(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            int samples,
+            ref AIMove bestMove,
+            ref int candidateCount)
+        {
+            // Anchor.randomThrows: choose an x across the whole level, start at
+            // y=-200 and fall vertically at 40 px/tick. Only floor contacts become
+            // candidates; water misses are discarded before generic scoring.
+            if (terrainGrid == null || gridW <= 0 || gridH <= 0 || float.IsInfinity(waterPixelY))
+                return;
+
+            int levelWidthPixels = gridW * (int)MutinyPhysics.PixelsPerUnit;
+            List<PhysicsBoxObstacle> boxes = MutinyBoxRegistry.GetObstacles();
+            for (int sample = 0; sample < Mathf.Max(0, samples); sample++)
+            {
+                int targetX = NextRandomInt(0, levelWidthPixels);
+                PhysicsBodyState body = PhysicsBodyState.CreateDefault(targetX, MutinyAnchor.DropStartYPixels);
+                body.Weight = 0f;
+                body.LeftExtent = body.RightExtent = 48f;
+                body.TopExtent = 96f;
+                body.BottomExtent = 0f;
+                body.HitsBoxes = true;
+
+                bool hitFloor = false;
+                // The source loop is bounded by water. Keep an additional guard so
+                // malformed verification terrain cannot hang the whole AI turn.
+                for (int tick = 0; tick < 1024 && body.Y < waterPixelY; tick++)
+                {
+                    body.VelocityX = 0f;
+                    body.VelocityY = MutinyAnchor.DropSpeedPixelsPerTick;
+                    StepResult result = MutinyPhysics.Step(ref body, terrainGrid, gridW, gridH, boxes);
+                    if (result.HitFloor)
+                    {
+                        hitFloor = true;
+                        break;
+                    }
+                }
+
+                if (!hitFloor)
+                    continue;
+
+                Vector2 landing = new Vector2(body.X, body.Y);
+                float score = ScoreGenericWeaponCandidate("anchor", landing, enemies, allies);
+                ConsiderCandidate(ref bestMove, new AIMove
+                {
+                    MoveType = AIMoveType.ShootWeapon,
+                    Character = shooter,
+                    WeaponType = "anchor",
+                    TargetPosition = landing,
+                    Score = score
+                }, ref candidateCount);
+            }
+        }
+
+        private void EvaluateCannon(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            int samples,
+            ref AIMove bestMove,
+            ref int candidateCount)
+        {
+            // Cannon.randomThrows: choose a point within dragRange / 2 about
+            // owner+(0,-100), advance the 10px cannon body through Solid collision,
+            // then simulate a 30-force weight-zero cannonball from the corrected spot.
+            // Cannon.aiPerform later repeats the same collision-aware body move.
+            Vector2 owner = PositionOf(shooter);
+            List<PhysicsBoxObstacle> placementBoxes = MutinyBoxRegistry.GetObstacles();
+            int count = Mathf.Max(0, samples);
+            for (int i = 0; i < count; i++)
+            {
+                int placementAngle = NextRandomInt(0, 360);
+                float distance = NextRandomFloat(0f, 1f) * 65f; // Weapon.dragRange / 2
+                float placementRadians = placementAngle * Mathf.Deg2Rad;
+                Vector2 requestedPlacement = owner + new Vector2(
+                    Mathf.Cos(placementRadians) * distance,
+                    MutinyCannon.PlacementOffsetY + Mathf.Sin(placementRadians) * distance);
+
+                // Cannon.randomThrows samples a second independent angle after
+                // resolving placement. The placement direction does not aim the shot.
+                int firingAngle = NextRandomInt(0, 360);
+                float firingRadians = firingAngle * Mathf.Deg2Rad;
+                Vector2 velocity = new Vector2(Mathf.Cos(firingRadians), Mathf.Sin(firingRadians)) * MutinyCannon.FireStrength;
+
+                PhysicsBodyState cannonBody = PhysicsBodyState.CreateDefault(
+                    owner.x, owner.y + MutinyCannon.InitialEquipmentOffsetY);
+                cannonBody.Weight = 0f;
+                cannonBody.HitsBoxes = true;
+                cannonBody.LeftExtent = cannonBody.RightExtent =
+                    cannonBody.TopExtent = cannonBody.BottomExtent = 10f;
+                cannonBody.VelocityX = requestedPlacement.x - cannonBody.X;
+                cannonBody.VelocityY = requestedPlacement.y - cannonBody.Y;
+                MutinyPhysics.Step(ref cannonBody, terrainGrid, gridW, gridH, placementBoxes);
+                Vector2 resolvedPlacement = new Vector2(cannonBody.X, cannonBody.Y);
+
+                PhysicsBodyState ball = PhysicsBodyState.CreateDefault(resolvedPlacement.x, resolvedPlacement.y);
+                ball.Weight = 0f;
+                ball.HitsBoxes = true;
+                ball.LeftExtent = ball.RightExtent = ball.TopExtent = ball.BottomExtent = 10f;
+                ball.VelocityX = velocity.x;
+                ball.VelocityY = velocity.y;
+                Vector2 impact = SimulateWeaponImpact(ball, "cannonball", terrainGrid, gridW, gridH,
+                    waterPixelY, placementBoxes, out _);
+                float score = ScoreGenericWeaponCandidate("cannon", impact, enemies, allies);
+                ConsiderCandidate(ref bestMove, new AIMove
+                {
+                    MoveType = AIMoveType.ShootWeapon,
+                    Character = shooter,
+                    WeaponType = "cannon",
+                    LaunchVelocity = velocity,
+                    // aiPerform receives the requested point and resolves it through
+                    // the live cannon body against the current terrain/boxes again.
+                    TargetPosition = requestedPlacement,
+                    CannonRotationDegrees = firingAngle,
+                    Score = score
+                }, ref candidateCount);
+            }
+        }
+
+        private void EvaluateSeagull(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            ref AIMove bestMove,
+            ref int candidateCount)
+        {
+            // Seagull.aiSimulation: fly 100..199 px above the highest living
+            // enemy, sample ten sorted x positions, then keep only positive shots.
+            float highestEnemyY = float.PositiveInfinity;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                MutinyCharacter enemy = enemies[i];
+                if (enemy != null && enemy.IsAlive && enemy.PhysicsBody != null)
+                    highestEnemyY = Mathf.Min(highestEnemyY, enemy.PhysicsBody.State.Y);
+            }
+            if (float.IsInfinity(highestEnemyY))
+                return;
+
+            float flightY = highestEnemyY - 100f - NextRandomInt(0, 100);
+            int levelWidthPixels = gridW * (int)MutinyPhysics.PixelsPerUnit;
+            var candidates = new List<float>(10);
+            for (int i = 0; i < 10; i++)
+                candidates.Add(NextRandomInt(0, levelWidthPixels));
+            candidates.Sort();
+
+            var acceptedShots = new List<float>();
+            float success = 0f;
+            List<PhysicsBoxObstacle> simulationBoxes = MutinyBoxRegistry.GetObstacles();
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                Vector2 impact = SimulateSeagullShotImpact(
+                    candidates[i] + MutinySeagull.OriginalShotXOffset,
+                    flightY,
+                    terrainGrid,
+                    gridW,
+                    gridH,
+                    waterPixelY,
+                    simulationBoxes);
+                float shotScore = ScoreSeagullShot(impact, enemies, false) +
+                                  ScoreSeagullShot(impact, allies, true);
+                if (shotScore > 0f)
+                {
+                    acceptedShots.Add(candidates[i]);
+                    success += shotScore;
+                }
+            }
+
+            // Character.as only creates an AI move when aiSimulation returned
+            // more than one accepted firing coordinate.
+            if (acceptedShots.Count <= 1)
+                return;
+
+            ConsiderCandidate(ref bestMove, new AIMove
+            {
+                MoveType = AIMoveType.ShootWeapon,
+                Character = shooter,
+                WeaponType = "seagull",
+                Score = success,
+                SeagullFlightY = flightY,
+                SeagullShotXs = acceptedShots.ToArray()
+            }, ref candidateCount);
+        }
+
+        private static Vector2 SimulateSeagullShotImpact(
+            float startX,
+            float startY,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            IReadOnlyList<PhysicsBoxObstacle> boxes)
+        {
+            PhysicsBodyState body = PhysicsBodyState.CreateDefault(startX, startY);
             body.LeftExtent = body.RightExtent = body.TopExtent = body.BottomExtent = MutinySeagullFire.OriginalExtent;
             body.Weight = MutinySeagullFire.OriginalWeight;
             body.VelocityX = MutinySeagull.OriginalFlightSpeed;
+            body.VelocityY = 0f;
             body.HitsBoxes = true;
-            var prediction = new MutinyAIPrediction(MutinyAIPrediction.Kind.Seagull, body, null,
-                terrainGrid, gridW, gridH, waterPixelY, boxes);
-            while (prediction.Advance()) { }
-            return prediction.Impact;
+
+            for (int tick = 0; tick < 512 && body.Y < waterPixelY; tick++)
+            {
+                StepResult result = MutinyPhysics.Step(ref body, terrainGrid, gridW, gridH, boxes);
+                if (result.HitFloor || result.HitCeiling || result.HitLeftWall || result.HitRightWall)
+                    break;
+            }
+            return new Vector2(body.X, body.Y);
         }
 
         private static float ScoreSeagullShot(
             Vector2 impact,
             List<MutinyCharacter> characters,
-            bool allies, DecisionWork work)
+            bool allies)
         {
             float score = 0f;
             for (int i = 0; i < characters.Count; i++)
             {
                 MutinyCharacter character = characters[i];
-                if (character == null || !StateOf(character, work).Alive || character.PhysicsBody == null)
+                if (character == null || !character.IsAlive || character.PhysicsBody == null)
                     continue;
 
-                Vector2 target = PositionOf(character, work);
+                Vector2 target = PositionOf(character);
                 float distance = Vector2.Distance(impact, target);
                 score += ScoreSeagullDistance(distance, allies);
             }
@@ -814,41 +1234,46 @@ namespace Mutiny.Simulation
                 : 1f - distance / 40f;
         }
 
-        private IEnumerable<object> BuildSelfThrowSteps(MutinyCharacter character, DecisionWork work, List<SelfThrowSample> samples)
+        private List<SelfThrowSample> BuildSelfThrowSamples(MutinyCharacter character, DecisionWork work)
         {
-            for (int sample = 0; sample < 50; sample++)
+            Vector2 startPos = new Vector2(character.PhysicsBody.State.X, character.PhysicsBody.State.Y);
+            const int originalSamples = 50;
+            List<PhysicsBoxObstacle> simulationBoxes = MutinyBoxRegistry.GetObstacles();
+            var samples = new List<SelfThrowSample>(originalSamples);
+            for (int s = 0; s < originalSamples; s++)
             {
-                Vector2 velocity = RandomArc(20f);
-                PhysicsBodyState body = StateOf(character, work).Body;
-                body.VelocityX = velocity.x;
-                body.VelocityY = velocity.y;
-                body.HitsBoxes = true;
-                var prediction = new MutinyAIPrediction(MutinyAIPrediction.Kind.Character, body, null,
-                    work.Terrain, work.GridW, work.GridH, work.WaterY, work.Snapshot.Boxes);
-                while (prediction.Advance()) yield return null;
-                samples.Add(new SelfThrowSample { Velocity = velocity, Landing = prediction.Impact });
-                yield return null;
+                Vector2 testVel = RandomArc(20f);
+                var simBody = character.PhysicsBody.State;
+                simBody.X = startPos.x;
+                simBody.Y = startPos.y;
+                simBody.VelocityX = testVel.x;
+                simBody.VelocityY = testVel.y;
+                simBody.HitsBoxes = true;
+                Vector2 impactPx = SimulateCharacterLanding(simBody, work.Terrain, work.GridW, work.GridH, work.WaterY,
+                    simulationBoxes, out _);
+                samples.Add(new SelfThrowSample { Velocity = testVel, Landing = impactPx });
             }
+            return samples;
         }
 
         private void EvaluateSelfThrowSample(MutinyCharacter character, SelfThrowSample sample,
             DecisionWork work, ref AIMove bestMove, ref int candidateCount)
         {
-            Vector2 start = PositionOf(character, work);
+            Vector2 start = PositionOf(character);
             Vector2 centroid = Vector2.zero;
             for (int i = 0; i < work.Enemies.Count; i++)
-                centroid += PositionOf(work.Enemies[i], work);
+                centroid += PositionOf(work.Enemies[i]);
             centroid /= work.Enemies.Count;
 
             // Character.aiThink calls cherryBomb.randomThrows(10) for each move
             // even though the decompiled score ignores those ten impact points.
             // Consume the same random draws so subsequent weapons retain order.
-            if (HasEffectiveWeapon(character, "cherryBomb", work))
+            if (HasEffectiveWeapon(character, "cherryBomb", work.ForcedWeaponType))
                 for (int i = 0; i < 10; i++)
                     RandomArc(MutinyWeaponFactory.GetTwangMaxForce("cherryBomb"));
 
             float score = ScoreSelfThrow(character, start, sample.Landing, centroid,
-                work.Enemies, work.Allies, work.WaterY, work.ForcedWeaponType, work);
+                work.Enemies, work.Allies, work.WaterY, work.ForcedWeaponType);
             ConsiderCandidate(ref bestMove, new AIMove
             {
                 MoveType = AIMoveType.SelfThrow,
@@ -856,7 +1281,7 @@ namespace Mutiny.Simulation
                 LaunchVelocity = sample.Velocity,
                 TargetPosition = sample.Landing,
                 Score = score
-            }, ref candidateCount, work);
+            }, ref candidateCount);
         }
 
         private static AIMove CreatePassMove()
@@ -999,30 +1424,30 @@ namespace Mutiny.Simulation
             string weaponType,
             Vector2 impact,
             List<MutinyCharacter> enemies,
-            List<MutinyCharacter> allies, DecisionWork work)
+            List<MutinyCharacter> allies)
         {
             float score = -0.01f;
             for (int i = 0; i < enemies.Count; i++)
             {
                 MutinyCharacter enemy = enemies[i];
-                if (enemy == null || !StateOf(enemy, work).Alive)
+                if (enemy == null || !enemy.IsAlive)
                     continue;
 
-                float distance = Vector2.Distance(impact, PositionOf(enemy, work));
+                float distance = Vector2.Distance(impact, PositionOf(enemy));
                 if (distance < 70f)
                 {
                     score += 1.5f - distance / 70f;
-                    score *= 1f + StateOf(enemy, work).Evilness;
+                    score *= 1f + enemy.Evilness;
                 }
             }
 
             for (int i = 0; i < allies.Count; i++)
             {
                 MutinyCharacter ally = allies[i];
-                if (ally == null || !StateOf(ally, work).Alive)
+                if (ally == null || !ally.IsAlive)
                     continue;
 
-                float distance = Vector2.Distance(impact, PositionOf(ally, work));
+                float distance = Vector2.Distance(impact, PositionOf(ally));
                 if (distance < 40f)
                     score -= 1.5f - distance / 40f;
             }
@@ -1042,7 +1467,7 @@ namespace Mutiny.Simulation
             List<MutinyCharacter> enemies,
             List<MutinyCharacter> allies,
             float waterPixelY,
-            string forcedWeaponType, DecisionWork work)
+            string forcedWeaponType)
         {
             float score = -(landing.y - start.y) * 0.003f;
             score += (Mathf.Abs(landing.x - enemyCentroid.x) - Mathf.Abs(start.x - enemyCentroid.x)) / -500f;
@@ -1053,10 +1478,10 @@ namespace Mutiny.Simulation
             for (int i = 0; i < enemies.Count; i++)
             {
                 MutinyCharacter enemy = enemies[i];
-                if (enemy == null || !StateOf(enemy, work).Alive)
+                if (enemy == null || !enemy.IsAlive)
                     continue;
 
-                float distance = Vector2.Distance(landing, PositionOf(enemy, work));
+                float distance = Vector2.Distance(landing, PositionOf(enemy));
                 float proximity;
                 if (distance < 200f)
                 {
@@ -1072,28 +1497,32 @@ namespace Mutiny.Simulation
                     proximity = 0.3f * Mathf.Pow(0.75f, distance / 200f);
                 }
                 score += proximity;
-                score *= 1f + StateOf(enemy, work).Evilness;
+                score *= 1f + enemy.Evilness;
             }
 
             for (int i = 0; i < allies.Count; i++)
             {
                 MutinyCharacter ally = allies[i];
-                if (ally == null || !StateOf(ally, work).Alive)
+                if (ally == null || !ally.IsAlive)
                     continue;
 
-                float distance = Vector2.Distance(landing, PositionOf(ally, work));
+                float distance = Vector2.Distance(landing, PositionOf(ally));
                 if (ally == character && distance < 80f)
                     score -= 1f - distance / 80f;
                 else if (ally != character && distance < 40f)
                     score -= 0.1f * (1f - distance / 40f);
             }
 
-            foreach (var chest in work.Snapshot.Chests)
-                if (!chest.Finished && Vector2.Distance(landing, new Vector2(chest.X, chest.FloorY)) < OriginalChestMoveRadiusPixels)
-                    score += OriginalChestMoveBonus;
+            MutinyTreasureChest[] chests = FindObjectsByType<MutinyTreasureChest>(FindObjectsSortMode.None);
+            for (int i = 0; i < chests.Length; i++)
+            {
+                if (chests[i] == null || chests[i].IsFinished)
+                    continue;
+                score += ScoreChestMoveLanding(landing, chests[i]);
+            }
 
-            if (HasEffectiveWeapon(character, "cherryBomb", work))
-                score = ScoreCherryBombFollowUpAtMoveLanding(score, character, landing, enemies, work);
+            if (HasEffectiveWeapon(character, "cherryBomb", forcedWeaponType))
+                score = ScoreCherryBombFollowUpAtMoveLanding(score, character, landing, enemies);
 
             float movement = Vector2.Distance(landing, start);
             score += movement < 300f ? 0.3f * movement / 300f - 0.3f : -0.3f;
@@ -1114,7 +1543,7 @@ namespace Mutiny.Simulation
             float score,
             MutinyCharacter character,
             Vector2 landing,
-            List<MutinyCharacter> enemies, DecisionWork work)
+            List<MutinyCharacter> enemies)
         {
             // Character.aiThink calls cherryBomb.randomThrows(10), but then (as
             // confirmed in pcode) scores the character movement landing every time.
@@ -1125,13 +1554,13 @@ namespace Mutiny.Simulation
                 for (int i = 0; i < enemies.Count; i++)
                 {
                     MutinyCharacter enemy = enemies[i];
-                    if (enemy == null || !StateOf(enemy, work).Alive)
+                    if (enemy == null || !enemy.IsAlive)
                         continue;
-                    float distance = Vector2.Distance(landing, PositionOf(enemy, work));
+                    float distance = Vector2.Distance(landing, PositionOf(enemy));
                     if (distance < 100f)
-                        followUp += (1f - distance / 100f) * (1f + StateOf(enemy, work).Evilness) * 0.5f;
+                        followUp += (1f - distance / 100f) * (1f + enemy.Evilness) * 0.5f;
                 }
-                float selfDistance = Vector2.Distance(landing, PositionOf(character, work));
+                float selfDistance = Vector2.Distance(landing, PositionOf(character));
                 if (selfDistance < 80f)
                     followUp -= 1f - selfDistance / 80f;
                 if (followUp > 0f)
@@ -1140,38 +1569,79 @@ namespace Mutiny.Simulation
             return score;
         }
 
-        private static float ScoreTidalWave(List<MutinyCharacter> enemies, List<MutinyCharacter> allies, float waterPixelY, DecisionWork work)
+        private static float ScoreTidalWave(List<MutinyCharacter> enemies, List<MutinyCharacter> allies, float waterPixelY)
         {
             float score = 0f;
             for (int i = 0; i < enemies.Count; i++)
             {
                 MutinyCharacter enemy = enemies[i];
-                if (enemy != null && StateOf(enemy, work).Alive && PositionOf(enemy, work).y >= waterPixelY - 300f)
-                    score += StateOf(enemy, work).Health / StateOf(enemy, work).MaxHealth * 0.5f;
+                if (enemy != null && enemy.IsAlive && PositionOf(enemy).y >= waterPixelY - 300f)
+                    score += enemy.Health / enemy.MaxHealth * 0.5f;
             }
             for (int i = 0; i < allies.Count; i++)
             {
                 MutinyCharacter ally = allies[i];
-                if (ally != null && StateOf(ally, work).Alive && PositionOf(ally, work).y >= waterPixelY - 300f)
+                if (ally != null && ally.IsAlive && PositionOf(ally).y >= waterPixelY - 300f)
                     score -= 1.5f;
             }
             return score;
         }
 
+        private void EvaluateVoodoo(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            ref AIMove bestMove,
+            ref int candidateCount)
+        {
+            List<PhysicsBoxObstacle> simulationBoxes = MutinyBoxRegistry.GetObstacles();
+            for (int enemyIndex = 0; enemyIndex < enemies.Count; enemyIndex++)
+            {
+                MutinyCharacter enemy = enemies[enemyIndex];
+                if (enemy == null || !enemy.IsAlive)
+                    continue;
+                Vector2 start = PositionOf(enemy);
+                var velocities = new Vector2[2];
+                var landings = new Vector2[2];
+                // Character.randomThrows(2) generates both trajectories before
+                // Character.aiThink draws either success perturbation.
+                for (int sample = 0; sample < 2; sample++)
+                {
+                    velocities[sample] = RandomArc(20f);
+                    PhysicsBodyState body = enemy.PhysicsBody.State;
+                    body.X = start.x;
+                    body.Y = start.y;
+                    body.VelocityX = velocities[sample].x;
+                    body.VelocityY = velocities[sample].y;
+                    body.HitsBoxes = true;
+                    landings[sample] = SimulateCharacterLanding(body, terrainGrid, gridW, gridH, waterPixelY,
+                        simulationBoxes, out _);
+                }
+                for (int sample = 0; sample < 2; sample++)
+                {
+                    Vector2 landing = landings[sample];
+                    float score = landing.y >= waterPixelY
+                        ? 1f + NextRandomFloat(0f, 0.2f)
+                        : NextRandomFloat(0f, 0.2f) - 0.5f;
+                    ConsiderCandidate(ref bestMove, new AIMove
+                    {
+                        MoveType = AIMoveType.ShootWeapon,
+                        Character = shooter,
+                        WeaponType = "voodooDoll",
+                        LaunchVelocity = velocities[sample],
+                        TargetCharacter = enemy,
+                        Score = score
+                    }, ref candidateCount);
+                }
+            }
+        }
 
-
-        private void ConsiderCandidate(ref AIMove bestMove, AIMove candidate, ref int candidateCount, DecisionWork work = null)
+        private void ConsiderCandidate(ref AIMove bestMove, AIMove candidate, ref int candidateCount)
         {
             candidateCount++;
-            if (work?.Enhanced != null && work.Enhanced.Collecting) work.Enhanced.Group(candidate).Add(candidate);
-            if (work != null)
-            {
-                string action = candidate.MoveType == AIMoveType.SelfThrow ? "jump" :
-                    string.IsNullOrEmpty(candidate.WeaponType) ? candidate.MoveType.ToString() : candidate.WeaponType;
-                if (!work.BestByAction.TryGetValue(action, out float previous))
-                { work.ActionOrder.Add(action); work.BestByAction.Add(action, candidate.Score); }
-                else if (candidate.Score > previous) work.BestByAction[action] = candidate.Score;
-            }
             if (m_Random != null)
                 m_Random.RecordCandidate(new MutinyAICandidateRecord
                 {
@@ -1193,19 +1663,53 @@ namespace Mutiny.Simulation
         }
 
         private static Vector2 SimulateWeaponImpact(
-            PhysicsBodyState body, string weaponType, string[,] grid, int gridW, int gridH,
-            float waterPixelY, IReadOnlyList<PhysicsBoxObstacle> boxes, out int steps,
-            IReadOnlyList<MutinyCharacter> bananaCharacters = null)
+            PhysicsBodyState body,
+            string weaponType,
+            string[,] grid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            IReadOnlyList<PhysicsBoxObstacle> boxes,
+            out int steps)
         {
-            var positions = new List<Vector2>();
-            if (bananaCharacters != null)
-                foreach (var character in bananaCharacters)
-                    if (character != null && character.PhysicsBody != null) positions.Add(PositionOf(character));
-            var prediction = new MutinyAIPrediction(MutinyAIPrediction.Kind.Weapon, body, weaponType,
-                grid, gridW, gridH, waterPixelY, boxes, positions);
-            while (prediction.Advance()) { }
-            steps = prediction.Steps;
-            return prediction.Impact;
+            // Weapon.randomThrows executes advanceMotion until the concrete weapon
+            // sets simulationFinished, with a source guard that breaks after the
+            // 101st step. Cannonball has its own contact/bounds completion loop.
+            int maxSteps = string.Equals(weaponType, "cannonball", StringComparison.OrdinalIgnoreCase)
+                ? 4096
+                : 101;
+            steps = 0;
+            while (steps < maxSteps)
+            {
+                if (string.Equals(weaponType, "parachuteBomb", StringComparison.OrdinalIgnoreCase))
+                    MutinyParachuteBomb.ApplyOriginalAirMotion(ref body);
+
+                StepResult res = MutinyPhysics.Step(ref body, grid, gridW, gridH, boxes);
+                steps++;
+                bool contacted = res.HitFloor || res.HitCeiling || res.HitLeftWall || res.HitRightWall;
+
+                if (TerminatesSimulationOnContact(weaponType) && contacted)
+                    return new Vector2(body.X, body.Y);
+
+                if ((string.Equals(weaponType, "dynamite", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(weaponType, "mine", StringComparison.OrdinalIgnoreCase)) &&
+                    body.VelocityX == 0f && Mathf.Abs(body.VelocityY) < 0.2f)
+                    return new Vector2(body.X, body.Y);
+
+                if (string.Equals(weaponType, "banana", StringComparison.OrdinalIgnoreCase) &&
+                    body.VelocityX == 0f && Mathf.Abs(body.VelocityY) < 0.5f)
+                    return new Vector2(body.X, body.Y);
+
+                if (string.Equals(weaponType, "parachuteBomb", StringComparison.OrdinalIgnoreCase))
+                    MutinyParachuteBomb.ApplyOriginalCeilingClamp(ref body);
+
+                if (string.Equals(weaponType, "cannonball", StringComparison.OrdinalIgnoreCase) &&
+                    (body.X < -300f || body.X > gridW * MutinyPhysics.PixelsPerUnit + 300f ||
+                     body.Y < -300f || (!float.IsInfinity(waterPixelY) && body.Y > waterPixelY)))
+                    return new Vector2(body.X, body.Y);
+            }
+
+            return new Vector2(body.X, body.Y);
         }
 
         private static bool TerminatesSimulationOnContact(string weaponType)
@@ -1218,14 +1722,26 @@ namespace Mutiny.Simulation
         }
 
         private static Vector2 SimulateCharacterLanding(
-            PhysicsBodyState body, string[,] grid, int gridW, int gridH, float waterPixelY,
-            IReadOnlyList<PhysicsBoxObstacle> boxes, out int steps)
+            PhysicsBodyState body,
+            string[,] grid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            IReadOnlyList<PhysicsBoxObstacle> boxes,
+            out int steps)
         {
-            var prediction = new MutinyAIPrediction(MutinyAIPrediction.Kind.Character, body, null,
-                grid, gridW, gridH, waterPixelY, boxes);
-            while (prediction.Advance()) { }
-            steps = prediction.Steps;
-            return prediction.Impact;
+            // Character.randomThrows has no arbitrary prediction horizon: it runs
+            // until horizontal/vertical motion settles or the character reaches
+            // water. Keep only a malformed-board safety guard.
+            steps = 0;
+            while ((body.VelocityX != 0f || Mathf.Abs(body.VelocityY) > 0.2f) &&
+                   body.Y < waterPixelY && steps < 4096)
+            {
+                MutinyPhysics.Step(ref body, grid, gridW, gridH, boxes);
+                steps++;
+            }
+
+            return new Vector2(body.X, body.Y);
         }
 
         internal static Vector2 SimulateWeaponImpactForVerification(
@@ -1238,9 +1754,7 @@ namespace Mutiny.Simulation
             out int steps)
         {
             return SimulateWeaponImpact(body, weaponType, grid, gridW, gridH, waterPixelY,
-                MutinyBoxRegistry.GetObstacles(), out steps,
-                string.Equals(weaponType, "banana", StringComparison.OrdinalIgnoreCase)
-                    ? FindObjectsByType<MutinyCharacter>() : null);
+                MutinyBoxRegistry.GetObstacles(), out steps);
         }
 
         internal static Vector2 SimulateCharacterLandingForVerification(
@@ -1260,7 +1774,6 @@ namespace Mutiny.Simulation
             var ch = move.Character;
             if (ch == null || !ch.IsAlive)
                 return;
-            LastCommittedStrategy = move.StrategyContext;
 
             if (move.MoveType == AIMoveType.ShootWeapon && !string.IsNullOrEmpty(move.WeaponType))
             {
@@ -1269,7 +1782,7 @@ namespace Mutiny.Simulation
                     $"firing weapon={move.WeaponType} character={ch.name} velocity={move.LaunchVelocity}", this);
                 if (string.Equals(move.WeaponType, "tidalWave", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon waveWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
+                    MutinyWeapon waveWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
                     if (waveWeapon is MutinyTidalWave wave)
                     {
                         float waterY = ch.PhysicsBody.WaterPixelY;
@@ -1279,7 +1792,7 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "seagull", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon birdWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
+                    MutinyWeapon birdWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
                     if (birdWeapon is MutinySeagull seagull)
                     {
                         seagull.PlaceForAi(move.SeagullFlightY, move.SeagullShotXs);
@@ -1288,9 +1801,8 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "gunpowderBarrel", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon barrelWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
-                    if (barrelWeapon is MutinyGunpowderBarrel barrel && barrel.BeginAiPlacement(
-                        move.ActionPlan?.BoxCount > 0 ? move.ActionPlan.CopyBoxPositions() : move.BoxPossibilities, move.ActionPlan?.BoxCount > 0))
+                    MutinyWeapon barrelWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    if (barrelWeapon is MutinyGunpowderBarrel barrel && barrel.BeginAiPlacement(move.BoxPossibilities))
                     {
                         if (consumeInventory) ch.ConsumeWeapon(move.WeaponType);
                         MutinyDebugLog.Info("AI", $"gunpowder barrel AI sequence armed candidates={move.BoxPossibilities.Length}", this);
@@ -1298,9 +1810,8 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "woodenCrate", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon crateWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
-                    if (crateWeapon is MutinyWoodenCrate crate && crate.BeginAiPlacement(
-                        move.ActionPlan?.BoxCount > 0 ? move.ActionPlan.CopyBoxPositions() : move.BoxPossibilities, move.ActionPlan?.BoxCount > 0))
+                    MutinyWeapon crateWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    if (crateWeapon is MutinyWoodenCrate crate && crate.BeginAiPlacement(move.BoxPossibilities))
                     {
                         if (consumeInventory) ch.ConsumeWeapon(move.WeaponType);
                         MutinyDebugLog.Info("AI", $"wooden crate AI sequence armed candidates={move.BoxPossibilities.Length}", this);
@@ -1308,13 +1819,13 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "anchor", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon anchorWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
+                    MutinyWeapon anchorWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
                     if (anchorWeapon is MutinyAnchor anchor && anchor.DropForAi(move.TargetPosition.x))
                         if (consumeInventory) ch.ConsumeWeapon(move.WeaponType);
                 }
                 else if (string.Equals(move.WeaponType, "cannon", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon cannonWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
+                    MutinyWeapon cannonWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
                     if (cannonWeapon is MutinyCannon cannon)
                     {
                         cannon.BeginAiFire(move.TargetPosition, move.CannonRotationDegrees, move.LaunchVelocity);
@@ -1323,7 +1834,7 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "voodooDoll", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon dollWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
+                    MutinyWeapon dollWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
                     if (dollWeapon is MutinyVoodooDoll doll)
                     {
                         doll.BindTarget(move.TargetCharacter);
@@ -1334,7 +1845,7 @@ namespace Mutiny.Simulation
                 else
                 {
                     MutinyWeaponFactory.SpawnAndFire(move.WeaponType, ch, move.LaunchVelocity,
-                        consumeInventory, move.StrategyContext, move.ActionPlan);
+                        consumeInventory);
                 }
                 ch.CanThrow = false;
                 ch.CanShoot = false;
@@ -1406,8 +1917,8 @@ namespace Mutiny.Simulation
 
         private void BeginTurnRoutine(string source)
         {
-            if (!isActiveAndEnabled) return;
-            CancelTurnRoutine();
+            if (m_TurnCoroutine != null)
+                StopCoroutine(m_TurnCoroutine);
             MutinyDebugLog.Info("AI", $"starting turn routine source={source}", this);
             m_TurnCoroutine = StartCoroutine(ExecuteAITurnRoutine());
         }

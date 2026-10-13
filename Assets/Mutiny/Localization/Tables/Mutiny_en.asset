@@ -55,11 +55,13 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 1236262917
-    m_Localized: click one of the buttons below.||play against the computer or|against a friend!
+    m_Localized: click one of the buttons below.||play against the computer or|against
+      a friend!
     m_Metadata:
       m_Items: []
   - m_Id: 1236262918
-    m_Localized: use your weapons to fire at your opponents|click and drag and then let go to throw them
+    m_Localized: use your weapons to fire at your opponents|click and drag and then
+      let go to throw them
     m_Metadata:
       m_Items: []
   - m_Id: 1236262919
@@ -67,7 +69,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 1236262920
-    m_Localized: no completed records yet| |defeat all 15 campaign levels|to record your high score!
+    m_Localized: no completed records yet| |defeat all 15 campaign levels|to record
+      your high score!
     m_Metadata:
       m_Items: []
   - m_Id: 1236262921
@@ -203,19 +206,22 @@ MonoBehaviour:
   - m_Id: 1236262953
     m_Localized: 'Click your character and drag
 
-      with the mouse to aim and set
+      with the mouse to aim and
+      set
 
       the power.
 
       you get to use this once per
 
-      turn before you use a weapon.'
+      turn before
+      you use a weapon.'
     m_Metadata:
       m_Items: []
   - m_Id: 1236262954
     m_Localized: 'click here if you want to finish
 
-      your turn without using a
+      your turn without using
+      a
 
       weapon.'
     m_Metadata:
@@ -251,7 +257,8 @@ MonoBehaviour:
 
       explodes on impact.
 
-      Click the cherry bomb and drag
+      Click
+      the cherry bomb and drag
 
       with your mouse to aim and set
 
@@ -267,7 +274,8 @@ MonoBehaviour:
 
       comes to rest.
 
-      Click the dynamite and drag
+      Click
+      the dynamite and drag
 
       with your mouse to aim and set
 
@@ -283,7 +291,8 @@ MonoBehaviour:
 
       other players out of the way.
 
-      Click the boulder and drag
+      Click
+      the boulder and drag
 
       with your mouse to aim and set
 
@@ -297,11 +306,13 @@ MonoBehaviour:
   - m_Id: 1236262967
     m_Localized: 'Eight coins which inflict a small
 
-      amount of damage. You get
+      amount of damage. You
+      get
 
       eight turns with this weapon.
 
-      Click each one and drag to aim
+      Click each one and drag to
+      aim
 
       and set the power.'
     m_Metadata:
@@ -313,13 +324,15 @@ MonoBehaviour:
   - m_Id: 1236262969
     m_Localized: 'This weapon explodes on impact
 
-      and sets the nearby area on fire.
+      and sets the nearby area
+      on fire.
 
       Click it and drag
 
       with your mouse to aim and set
 
-      the power.'
+      the
+      power.'
     m_Metadata:
       m_Items: []
   - m_Id: 1236262970
@@ -331,11 +344,13 @@ MonoBehaviour:
 
       Click and drag with the mouse
 
-      to aim and set the power.
+      to
+      aim and set the power.
 
       Then click your mouse again to
 
-      make it explode.'
+      make it
+      explode.'
     m_Metadata:
       m_Items: []
   - m_Id: 1236262972
@@ -347,7 +362,8 @@ MonoBehaviour:
 
       to aim and set the power.
 
-      As it drifts down use
+      As
+      it drifts down use
 
       your cursor as a fan to push it
 
@@ -363,7 +379,8 @@ MonoBehaviour:
 
       place down three crates.
 
-      use these to form a wall to
+      use
+      these to form a wall to
 
       protect your characters.'
     m_Metadata:
@@ -377,7 +394,8 @@ MonoBehaviour:
 
       place down two barrels.
 
-      these will explode when hit by
+      these
+      will explode when hit by
 
       a weapon.'
     m_Metadata:
@@ -389,7 +407,8 @@ MonoBehaviour:
   - m_Id: 1236262979
     m_Localized: 'Click on the screen to choose a
 
-      path for the seagull to fly.
+      path for the seagull to
+      fly.
 
       Then click repeatedly to poop
 
@@ -405,7 +424,8 @@ MonoBehaviour:
 
       with the mouse to aim and
 
-      set the power.
+      set
+      the power.
 
       It will detonate when
 
@@ -421,11 +441,13 @@ MonoBehaviour:
 
       within the circle.
 
-      click and drag the pin at the
+      click
+      and drag the pin at the
 
       back to turn the cannon.
 
-      release it to fire!'
+      release it to
+      fire!'
     m_Metadata:
       m_Items: []
   - m_Id: 1236262984
@@ -437,7 +459,8 @@ MonoBehaviour:
 
       drop a huge anchor down
 
-      onto enemies!'
+      onto
+      enemies!'
     m_Metadata:
       m_Items: []
   - m_Id: 1236262986
@@ -449,11 +472,13 @@ MonoBehaviour:
 
       clicking on them. then click
 
-      and drag to throw the doll and
+      and
+      drag to throw the doll and
 
       watch the enemy helplessly
 
-      fly off in the same direction!'
+      fly off
+      in the same direction!'
     m_Metadata:
       m_Items: []
   - m_Id: 1236262988
@@ -463,7 +488,8 @@ MonoBehaviour:
   - m_Id: 1236262989
     m_Localized: 'click to send a huge tidal wave
 
-      across the bottom of the stage.
+      across the bottom of the
+      stage.
 
       It will affect all players it
 
@@ -499,7 +525,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684358
-    m_Localized: Looks like they fell for|our deadly pincer|manoeuvre... at last their|beards be ours.
+    m_Localized: Looks like they fell for|our deadly pincer|manoeuvre... at last
+      their|beards be ours.
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684359
@@ -535,7 +562,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684367
-    m_Localized: Guard the fruit mateys...|If the monkeys get it we'll|be up for another bout|of scurvy!
+    m_Localized: Guard the fruit mateys...|If the monkeys get it we'll|be up for
+      another bout|of scurvy!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684368
@@ -551,23 +579,28 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684371
-    m_Localized: These boys look too clean|to be in a real fight! And|look... they've still got|teeth to knock out!
+    m_Localized: These boys look too clean|to be in a real fight! And|look... they've
+      still got|teeth to knock out!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684372
-    m_Localized: We fight for King and|Country! ...and because we|get a decent benefits|package and pension plan!
+    m_Localized: We fight for King and|Country! ...and because we|get a decent benefits|package
+      and pension plan!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684373
-    m_Localized: They don't look so smart|now lads... I think We'll|be using his toupee to swab|the decks!
+    m_Localized: They don't look so smart|now lads... I think We'll|be using his
+      toupee to swab|the decks!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684374
-    m_Localized: You pirates will get what|you deserve... a short drop|and a sudden stop!
+    m_Localized: You pirates will get what|you deserve... a short drop|and a sudden
+      stop!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684375
-    m_Localized: Yargh... These guys have|one too many eye patches!|This should be easy! Let's|get 'em!
+    m_Localized: Yargh... These guys have|one too many eye patches!|This should be
+      easy! Let's|get 'em!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684376
@@ -583,7 +616,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684379
-    m_Localized: Garrrgh... Looks like we've|found ourselves some|mighty fine booty here,|mateys!
+    m_Localized: Garrrgh... Looks like we've|found ourselves some|mighty fine booty
+      here,|mateys!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684380
@@ -603,7 +637,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684384
-    m_Localized: We're not Old, we're|experienced... and now we're|gonna kick your... erm...|erm... what was I saying|again... who are you?
+    m_Localized: We're not Old, we're|experienced... and now we're|gonna kick your...
+      erm...|erm... what was I saying|again... who are you?
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684385
@@ -611,35 +646,43 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684386
-    m_Localized: That'll show you... in my|day we used to fight a|Kraken with nothin' but a|couple o' stones. Arrrgh...|Those be the days...
+    m_Localized: That'll show you... in my|day we used to fight a|Kraken with nothin'
+      but a|couple o' stones. Arrrgh...|Those be the days...
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684387
-    m_Localized: This guy be looking a little|too jolly to be flying the|ol' jolly roger, eh mateys?
+    m_Localized: This guy be looking a little|too jolly to be flying the|ol' jolly
+      roger, eh mateys?
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684388
-    m_Localized: Ohhhh look at you... don't|you look tough? Anyway,|haven't you heard? Fancy|colours are the new black!
+    m_Localized: Ohhhh look at you... don't|you look tough? Anyway,|haven't you heard?
+      Fancy|colours are the new black!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684389
-    m_Localized: I'd have beaten you sooner if|your fancy beards didn't|keep catchin' the light!
+    m_Localized: I'd have beaten you sooner if|your fancy beards didn't|keep catchin'
+      the light!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684390
-    m_Localized: Oo-er! Now we're finished|with them, it's time for a|bit of retail therapy!
+    m_Localized: Oo-er! Now we're finished|with them, it's time for a|bit of retail
+      therapy!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684391
-    m_Localized: Yarrgh! ...ye be wanting to|grow a proper beard before|taking on the likes of us,|boys...
+    m_Localized: Yarrgh! ...ye be wanting to|grow a proper beard before|taking on
+      the likes of us,|boys...
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684392
-    m_Localized: We're no boys! I had a couple|of hairs only last month on|me chin, just ask me mum!
+    m_Localized: We're no boys! I had a couple|of hairs only last month on|me chin,
+      just ask me mum!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684393
-    m_Localized: Yarrgh! Best be running|along home now boys! I think|it be past yer bedtime?
+    m_Localized: Yarrgh! Best be running|along home now boys! I think|it be past
+      yer bedtime?
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684394
@@ -647,7 +690,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684395
-    m_Localized: Garrgh! I've got a bad feelin'|about this lads! They be|lookin' kinda hungry!
+    m_Localized: Garrgh! I've got a bad feelin'|about this lads! They be|lookin'
+      kinda hungry!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684396
@@ -655,15 +699,18 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684397
-    m_Localized: Good work lads! we've|avoided being lunch... looks|like they'll have to stick|with mangos and coconuts|from now on!
+    m_Localized: Good work lads! we've|avoided being lunch... looks|like they'll
+      have to stick|with mangos and coconuts|from now on!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684398
-    m_Localized: mmmmmmm! can't remember|the last time we had a good|pirate stew!|...has anyone got the salt?
+    m_Localized: mmmmmmm! can't remember|the last time we had a good|pirate stew!|...has
+      anyone got the salt?
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684399
-    m_Localized: This crew looks like they|could do with a good feed|more than a fight...
+    m_Localized: This crew looks like they|could do with a good feed|more than a
+      fight...
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684400
@@ -679,11 +726,13 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684403
-    m_Localized: Garrrgh! what a big hat...|I think he be trying to|make up for something, lads!
+    m_Localized: Garrrgh! what a big hat...|I think he be trying to|make up for something,
+      lads!
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684404
-    m_Localized: Argh! ye not be winning with|a hat like that. And once I|win I'll be taking your hats.
+    m_Localized: Argh! ye not be winning with|a hat like that. And once I|win I'll
+      be taking your hats.
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684405
@@ -695,7 +744,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684407
-    m_Localized: I think he's been playing|with a few too many|voodoo dolls, lads! he's back|from Davey Jones locker.
+    m_Localized: I think he's been playing|with a few too many|voodoo dolls, lads!
+      he's back|from Davey Jones locker.
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684408
@@ -703,7 +753,8 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684409
-    m_Localized: Yo-Ho-Ho... we've done it|lads! that finished him off...|eerrrrm didn't we?
+    m_Localized: Yo-Ho-Ho... we've done it|lads! that finished him off...|eerrrrm
+      didn't we?
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684410
@@ -711,7 +762,9 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684411
-    m_Localized: Arrgh, Ahoy mateys! That|be too easy. Them bunch of|lilly livred land lubbers|never stood a chance.|we be both filthy and rich |now. Nothing be standing in |our way. Yo ho ho...
+    m_Localized: Arrgh, Ahoy mateys! That|be too easy. Them bunch of|lilly livred
+      land lubbers|never stood a chance.|we be both filthy and rich |now. Nothing
+      be standing in |our way. Yo ho ho...
     m_Metadata:
       m_Items: []
   - m_Id: 84226467684412
@@ -742,20 +795,64 @@ MonoBehaviour:
     m_Localized: sound fx
     m_Metadata:
       m_Items: []
-  - m_Id: 1893825906728960
-    m_Localized: "Shiver me timbers! Look at all that shiny metal! We\u2019ll pry those glowing glass eyes off yer heads and sell 'em for rum!"
+  - m_Id: 1439731086553088
+    m_Localized: lan battle
     m_Metadata:
       m_Items: []
-  - m_Id: 1893825948672000
-    m_Localized: Work it, make it, do it, makes us.
+  - m_Id: 1439731166244864
+    m_Localized: create host
     m_Metadata:
       m_Items: []
-  - m_Id: 1893825948672001
-    m_Localized: "Ha! Big shiny suit, but yer still hollow inside! Grab the crowbars, lads\u2014let's smash these tin cans for scrap!"
+  - m_Id: 1439731166244865
+    m_Localized: join
     m_Metadata:
       m_Items: []
-  - m_Id: 1893825948672002
-    m_Localized: Harder, better, faster, stronger.
+  - m_Id: 1439731166244866
+    m_Localized: host ip
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244867
+    m_Localized: waiting for a player...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244868
+    m_Localized: connecting...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244869
+    m_Localized: player joined! pick a level
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244870
+    m_Localized: connected! waiting for the host...
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244871
+    m_Localized: match in progress
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1439731166244872
+    m_Localized: disconnected
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1591801328463872
+    m_Localized: 'quick battle: off'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1591801408155648
+    m_Localized: 'quick battle: on'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4074888159326208
+    m_Localized: 'first player: random'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4074888327098368
+    m_Localized: 'first player: 1P'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4074888327098369
+    m_Localized: 'first player: 2P'
     m_Metadata:
       m_Items: []
   references:

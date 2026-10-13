@@ -1,2 +1,0 @@
-Unity 6000.6.0f1; controller initial support
-Actual Play Mode result: 170/170

@@ -34,17 +34,11 @@ namespace Mutiny.Levels
                 Width = GetRequiredInt(root, "width", sourceName),
                 Height = GetRequiredInt(root, "height", sourceName),
                 Players = GetRequiredInt(root, "players", sourceName),
-                Name = (string)root.Attribute("name") ?? string.Empty,
-                GravityScale = GetGravityScale(root, sourceName),
-                VisualTheme = ((string)root.Attribute("visualTheme") ?? string.Empty).Trim(),
-                SpaceThemeMinX = root.Attribute("spaceThemeMinX") == null
-                    ? 0 : GetRequiredInt(root, "spaceThemeMinX", sourceName)
+                Name = (string)root.Attribute("name") ?? string.Empty
             };
 
             if (level.Width <= 0 || level.Height <= 0 || level.Players <= 0)
                 throw Error(root, sourceName, "width, height and players must be positive integers.");
-            if (level.SpaceThemeMinX < 0 || level.SpaceThemeMinX >= level.Width)
-                throw Error(root, sourceName, "spaceThemeMinX must be within the map width.");
 
             XElement[] rows = root.Elements("row").ToArray();
             XElement[] backgroundRows = root.Elements("bgRow").ToArray();
@@ -77,22 +71,6 @@ namespace Mutiny.Levels
                 level.Objects.Add(obj);
             }
 
-            foreach (XElement element in root.Elements("speechAudio"))
-            {
-                int line = GetRequiredInt(element, "line", sourceName);
-                if (line < 0 || line > 3 || level.SpeechAudio.Any(audio => audio.Line == line))
-                    throw Error(element, sourceName, "speechAudio line must be unique and between 0 and 3.");
-                string[] clips = ((string)element.Attribute("clips") ?? string.Empty)
-                    .Split(',').Select(clip => clip.Trim()).ToArray();
-                if (clips.Any(string.IsNullOrEmpty))
-                    throw Error(element, sourceName, "speechAudio clips must be a non-empty comma-separated list.");
-                float gap = .5f;
-                if (element.Attribute("gapSeconds") != null &&
-                    (!float.TryParse((string)element.Attribute("gapSeconds"), NumberStyles.Float,
-                        CultureInfo.InvariantCulture, out gap) || float.IsNaN(gap) || float.IsInfinity(gap) || gap < 0))
-                    throw Error(element, sourceName, "speechAudio gapSeconds must be finite and non-negative.");
-                level.SpeechAudio.Add(new MutinySpeechAudio { Line = line, Clips = clips, GapSeconds = gap });
-            }
             return level;
         }
 
@@ -169,16 +147,6 @@ namespace Mutiny.Levels
             if (actual != expected)
                 throw Error(root, sourceName,
                     $"{layerName} row count mismatch: expected {expected}, got {actual}.");
-        }
-
-        private static float GetGravityScale(XElement root, string sourceName)
-        {
-            XAttribute attribute = root.Attribute("gravityScale");
-            if (attribute == null) return 1f;
-            if (!float.TryParse(attribute.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float value) ||
-                float.IsNaN(value) || float.IsInfinity(value) || value <= 0f)
-                throw Error(attribute, sourceName, "gravityScale must be a finite positive number.");
-            return value;
         }
 
         private static int GetRequiredInt(XElement element, string name, string sourceName)

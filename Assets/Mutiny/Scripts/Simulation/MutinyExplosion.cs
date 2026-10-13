@@ -153,7 +153,7 @@ namespace Mutiny.Simulation
 
             // 1. Damage and launch characters in radius (Flash AS2 Explosion.hit)
             var knockedCharacters = KnockbackApplied != null ? new List<MutinyCharacter>() : null;
-            var characters = FindObjectsByType<MutinyCharacter>();
+            var characters = FindObjectsByType<MutinyCharacter>(FindObjectsSortMode.None);
             for (int i = 0; i < characters.Length; i++)
             {
                 var ch = characters[i];
@@ -163,17 +163,38 @@ namespace Mutiny.Simulation
                 float charX = ch.PhysicsBody.State.X;
                 float charY = ch.PhysicsBody.State.Y;
 
-                if (MutinyCombatMath.ExplosionHit(new Vector2(charX, charY), new Vector2(PixelX, PixelY),
-                    Radius, MaxDamage, out float ratio, out Vector2 impulse))
+                float dx = charX - PixelX;
+                float dy = charY - PixelY;
+                float distSq = dx * dx + dy * dy;
+
+                if (distSq <= Radius * Radius)
                 {
+                    float dist = Mathf.Sqrt(distSq);
+                    float normX;
+                    float normY;
+
+                    if (dist < 0.0001f)
+                    {
+                        normX = 0f;
+                        normY = -1f; // Flash Y negative is upwards
+                        dist = 1f;
+                    }
+                    else
+                    {
+                        normX = dx / dist;
+                        normY = dy / dist;
+                    }
+
+                    // Flash: ratio = 1 - dist / radius
+                    float ratio = 1.0f - (dist / Radius);
                     // Flash: force = 0.06 * ratio * maxDamage
                     float force = 0.06f * ratio * MaxDamage;
 
                     // Flash AS2 exact impulse formula:
                     // velocityX += normX * 5 * force;
                     // velocityY += normY * 5 * force - force * 6; (subtracting is upward pop in Flash)
-                    ch.PhysicsBody.State.VelocityX += impulse.x;
-                    ch.PhysicsBody.State.VelocityY += impulse.y;
+                    ch.PhysicsBody.State.VelocityX += normX * 5.0f * force;
+                    ch.PhysicsBody.State.VelocityY += (normY * 5.0f * force) - (force * 6.0f);
 
                     if (force > 0f && !ch.PhysicsBody.IsAtRest)
                         knockedCharacters?.Add(ch);

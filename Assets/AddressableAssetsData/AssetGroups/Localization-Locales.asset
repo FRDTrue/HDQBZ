@@ -13,16 +13,12 @@ MonoBehaviour:
   m_Name: Localization-Locales
   m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
   m_GroupName: Localization-Locales
+  m_Data:
+    m_SerializedData: []
   m_GUID: 502197a8099aae245b8b80716385d328
   m_SerializeEntries:
   - m_GUID: a6caf3b8b4c16724592c41b9fe9929b3
-    m_Address: "\u7B80\u4F53\u4E2D\u6587"
-    m_ReadOnly: 1
-    m_SerializedLabels:
-    - Locale
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: ae558643df198ab43a7e3b303cef5321
-    m_Address: "\u7E41\u9AD4\u4E2D\u6587\uFF08\u9999\u6E2F\uFF09"
+    m_Address: Chinese-Simplified
     m_ReadOnly: 1
     m_SerializedLabels:
     - Locale
@@ -39,4 +35,3 @@ MonoBehaviour:
     m_Schemas:
     - {fileID: 11400000, guid: 30c6e43412f6d2e43af0d093980f915e, type: 2}
     - {fileID: 11400000, guid: e122c5e7889877f4197fb548c38ae890, type: 2}
-    - {fileID: 11400000, guid: 1aa2960fbbe59af4aae030a55ec60d76, type: 2}

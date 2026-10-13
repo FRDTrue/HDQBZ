@@ -13,7 +13,7 @@ namespace Mutiny.Verification
         private static readonly string[] Opponents =
         {
             "squid", "crab", "shark", "parrot", "monkey", "soldier", "blindPirate", "femalePirate",
-            "oldPirate", "rainbowBeard", "cabinBoy", "tribe", "skeletonPirate", "bossGuy", "bossGuyZombie", "Robot"
+            "oldPirate", "rainbowBeard", "cabinBoy", "tribe", "skeletonPirate", "bossGuy", "bossGuyZombie"
         };
 
         public static MutinyLevel1VerificationResult Run(MutinyGMManager gm)
@@ -36,7 +36,7 @@ namespace Mutiny.Verification
                 // Reload through the same asset-loading entry used by cold startup.
                 typeof(MutinyAudioManager).GetMethod("LoadAllAudioClips", BindingFlags.Instance | BindingFlags.NonPublic)
                     .Invoke(audio, null);
-                gm.ExecuteCommand("lang zh-cn");
+                gm.ExecuteCommand("setlanguage zh-cn");
                 VerifyLanguageSwitch(result, gm, audio);
                 foreach (string opponent in Opponents)
                 {
@@ -60,25 +60,7 @@ namespace Mutiny.Verification
                         MutinyGameHUD.IsCornerHovered(control, new Vector2(bubble.x + 0.5f, bubble.center.y), true),
                         "LOC-CORNER-01 full Chinese glyphs fit expanded tooltip and its edge retains hover: " + control);
                 }
-                gm.ExecuteCommand("lang zh-hk");
-                foreach (string opponent in Opponents)
-                {
-                    VerifyConversation(result, opponent, true);
-                    VerifyConversation(result, opponent, false);
-                }
-                foreach (MutinyCornerControl control in Enum.GetValues(typeof(MutinyCornerControl)))
-                {
-                    string expected = control == MutinyCornerControl.Quit ? "離開" :
-                        control == MutinyCornerControl.Music ? "音樂" : "音效";
-                    Rect bubble = MutinyGameHUD.ResolveCornerBubbleRect(control);
-                    Vector2 textSize = MutinyLocalizedText.MeasureTooltipSize(expected);
-                    result.Assert(MutinyGameHUD.ResolveLocalizedCornerTooltip(control) == expected &&
-                                  textSize.x <= bubble.width - 4f && textSize.y <= 18f,
-                        "LOC-HK-03 HK regional tooltip text and dimensions: " + control);
-                }
-                gm.ExecuteCommand("lang en");
-                VerifyConversation(result, "Robot", true);
-                VerifyConversation(result, "Robot", false);
+                gm.ExecuteCommand("setlanguage en");
                 foreach (MutinyCornerControl control in Enum.GetValues(typeof(MutinyCornerControl)))
                     result.Assert(MutinyGameHUD.ResolveLocalizedCornerTooltip(control) ==
                         MutinyGameHUD.ResolveOriginalCornerTooltip(control), "LOC-CORNER-01 English hover text: " + control);
@@ -105,7 +87,7 @@ namespace Mutiny.Verification
                 MutinySpeechController speech = fixture.Speech;
                 speech.AdvanceSpeechForVerification(5 * Tick + 0.00001f);
                 MutinyCharacter speaker = speech.Speaker;
-                gm.ExecuteCommand("lang en");
+                gm.ExecuteCommand("setlanguage en");
                 result.Assert(!speech.IsBubbleVisible && speech.VisibleText.Length == 0,
                     "LOC-SPEECH-02 switching during start delay keeps the bubble hidden");
                 speech.AdvanceSpeechForVerification(5 * Tick);
@@ -113,23 +95,17 @@ namespace Mutiny.Verification
                     "LOC-SPEECH-02 language switch does not restart ten-tick delay");
                 speech.AdvanceSpeechForVerification(Tick);
                 string partialEnglish = speech.VisibleText;
-                string fullEnglish = speech.FullText;
-                gm.ExecuteCommand("lang zh-cn");
+                gm.ExecuteCommand("setlanguage zh-cn");
                 string chinese = MutinyLocalization.Text("speech.squid.0", null);
                 result.Assert(partialEnglish.Length == 3 && speech.VisibleText.Length > 0 &&
                     speech.VisibleText.Length < chinese.Length && chinese.StartsWith(speech.VisibleText) &&
-                    speech.FullText == chinese && !string.IsNullOrEmpty(fullEnglish) &&
                     speech.Speaker == speaker && voices == 1,
                     "LOC-SPEECH-02 partial text re-resolves immediately without restarting speaker or voice");
                 speech.Click();
                 result.Assert(speech.VisibleText == chinese,
                     "LOC-SPEECH-02 production click completes the current Chinese line");
-                gm.ExecuteCommand("lang zh-hk");
-                result.Assert(speech.VisibleText == MutinyLocalization.Text("speech.squid.0", null) &&
-                              speech.Speaker == speaker && voices == 1,
-                    "LOC-HK-02 active speech switches immediately to HK without replaying voice or changing speaker");
                 speech.AdvanceSpeechForVerification(2 * Tick);
-                gm.ExecuteCommand("lang en");
+                gm.ExecuteCommand("setlanguage en");
                 result.Assert(speech.VisibleText == MutinyLocalization.Text("speech.squid.0", null) && voices == 1,
                     "LOC-SPEECH-02 a completed line stays complete when switching to longer English");
                 speech.AdvanceSpeechForVerification(158 * Tick);
@@ -138,7 +114,7 @@ namespace Mutiny.Verification
                 speech.AdvanceSpeechForVerification(Tick);
                 result.Assert(speech.Speaker == fixture.Enemy && !speech.IsBubbleVisible && voices == 2,
                     "LOC-SPEECH-02 next tick starts opponent response with exactly one new voice");
-                gm.ExecuteCommand("lang zh-cn");
+                gm.ExecuteCommand("setlanguage zh-cn");
             }
             finally
             {
