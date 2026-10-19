@@ -43,7 +43,16 @@
     "com.unity.modules.vr": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
     "com.unity.modules.xr": "1.0.0",
-    "cn.tuanjie.codely.bridge": "https://cnb.cool/unity/codely/cn.tuanjie.codely.bridge.git#1.0.85",
+    "cn.tuanjie.codely.bridge": "1.0.87-exp.2",
     "cn.tuanjie.ai.generators": "file:../.codely-cli/extensions/TJGenerators/Packages/cn.tuanjie.ai.generators"
-  }
+  },
+  "scopedRegistries": [
+    {
+      "name": "Tuanjie Packman",
+      "url": "https://packages.tuanjie.cn",
+      "scopes": [
+        "cn.tuanjie.codely.bridge"
+      ]
+    }
+  ]
 }

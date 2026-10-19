@@ -13,14 +13,14 @@
       }
     },
     "cn.tuanjie.codely.bridge": {
-      "version": "https://cnb.cool/unity/codely/cn.tuanjie.codely.bridge.git#1.0.85",
+      "version": "1.0.87-exp.2",
       "depth": 0,
-      "source": "git",
+      "source": "registry",
       "dependencies": {
         "com.unity.ext.nunit": "1.0.6",
         "com.unity.ugui": "1.0.0"
       },
-      "hash": "b6197c6de7371deebefa52ab32939a1dccad8662"
+      "url": "https://packages.tuanjie.cn"
     },
     "com.unity.2d.animation": {
       "version": "9.2.0",
