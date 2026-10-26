@@ -76,3 +76,11 @@ crashlytics-build.properties
 
 # Local analysis workspace (kept outside this Unity project)
 /scratch/
+.codely-cli
+ProjectSettings
+Assets/WX-WASM-SDK-V2
+Assets/WX-WASM-SDK-V2.meta
+Assets/TJ-WASM-SDK-V2
+Assets/TJ-WASM-SDK-V2.meta
+Assets/Settings
+*.meta
